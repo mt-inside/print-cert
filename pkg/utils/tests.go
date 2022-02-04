@@ -176,23 +176,25 @@ func CheckTls2(addr string, port string, sni string, host string) {
 
 	fmt.Printf("%s", BrightStyle.Render(resp.Proto))
 	if resp.StatusCode < 400 {
-		fmt.Printf(" %s\n", OkStyle.Render(resp.Status))
+		fmt.Printf(" %s", OkStyle.Render(resp.Status))
 	} else if resp.StatusCode < 500 {
-		fmt.Printf(" %s\n", WarnStyle.Render(resp.Status))
+		fmt.Printf(" %s", WarnStyle.Render(resp.Status))
 	} else {
-		fmt.Printf(" %s\n", FailStyle.Render(resp.Status))
+		fmt.Printf(" %s", FailStyle.Render(resp.Status))
 	}
+	fmt.Printf(" from server %s", RenderOptionalString(resp.Header.Get("server")))
+	fmt.Println()
 
 	// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
 
-	fmt.Printf("\t%d bytes of %s from %s\n", resp.ContentLength, BrightStyle.Render(resp.Header.Get("content-type")), BrightStyle.Render(resp.Header.Get("server")))
+	fmt.Printf("\tclaimed %s bytes of %s\n", BrightStyle.Render(strconv.FormatInt(int64(resp.ContentLength), 10)), BrightStyle.Render(resp.Header.Get("content-type")))
 	if resp.Uncompressed {
 		fmt.Printf("\t%s Note: content was transparently decompressed; length information will not be accurate\n")
 	}
 
 	rawBody, err := ioutil.ReadAll(resp.Body)
 	CheckErr(err)
-	fmt.Printf("\t%s bytes actual body read\n", BrightStyle.Render(strconv.FormatInt(int64(len(rawBody)), 10)))
+	fmt.Printf("\tactual %s bytes of body read\n", BrightStyle.Render(strconv.FormatInt(int64(len(rawBody)), 10)))
 }
 
 func renderIssuer(cert *x509.Certificate) string {
@@ -210,6 +212,7 @@ func ips2str(ips []net.IP) []string {
 	return ipStrs
 }
 
+//TODO: need to understand wildcards etc. Defer to the library to do this check
 func nameInCert(name string, subj pkix.Name, sans []string) bool {
 	if name == subj.CommonName {
 		return true
