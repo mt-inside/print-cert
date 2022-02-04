@@ -31,6 +31,8 @@ func main() {
 	var ip net.IP
 	var host string
 
+	Banner("DNS")
+
 	ip = net.ParseIP(addr)
 	if ip == nil {
 		host = addr
@@ -41,9 +43,7 @@ func main() {
 		CheckDns(host)
 	}
 
-	/* Check DNS */
-
-	Banner("DNS")
+	Banner("TLS")
 
 	// f5RevHost := checkRevDns(f5Ip)
 	// checkDnsConsistent(f5Host, f5RevHost)

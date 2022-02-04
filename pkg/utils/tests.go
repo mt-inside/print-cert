@@ -98,6 +98,7 @@ func CheckTls2(l4Addr string, host string) {
 				InsecureSkipVerify: true,
 				ServerName:         host, // SNI for TLS vhosting
 			},
+			ForceAttemptHTTP2:     true,            // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
 			TLSHandshakeTimeout:   1 * time.Second, // assume this includes TCP handshake
 			ResponseHeaderTimeout: 5 * time.Second,
 			DisableCompression:    true,
@@ -109,7 +110,6 @@ func CheckTls2(l4Addr string, host string) {
 	}
 
 	fmt.Printf("%s TLS handshake with %s (SNI ServerName %s, HTTP Host %s)...\n", STrying, AddrStyle.Render(l4Addr), AddrStyle.Render(host), AddrStyle.Render(l4Addr))
-	// TODO set host header
 	// TODO: not negoiating h2, looks like its sending no ALPN (and if we manually do it barfs on a binary response with i think is h2 when it's only expecting h1.1). Use go/x/net/http2 to do http2
 	l7Addr := url.URL{
 		Scheme: "https",
@@ -123,38 +123,33 @@ func CheckTls2(l4Addr string, host string) {
 	CheckErr(err)
 	defer resp.Body.Close()
 
+	fmt.Println()
+
 	cs := resp.TLS
-	fmt.Printf("%s TLS handshake with %s. %s; ALPN proto %s\n", SOk, AddrStyle.Render(l4Addr), versionName(cs.Version), cs.NegotiatedProtocol)
-	fmt.Printf("\t%s TLS cypher suite %s\n", SInfo, tls.CipherSuiteName(cs.CipherSuite))
+	fmt.Printf("Handshake complete. %s; ALPN proto %s\n", BrightStyle.Render(versionName(cs.Version)), BrightStyle.Render(RenderOptionalString(cs.NegotiatedProtocol)))
+	fmt.Printf("\tTLS cypher suite %s\n", tls.CipherSuiteName(cs.CipherSuite))
 
 	/* Cert chain */
 
+	fmt.Println()
 	servingCert := cs.PeerCertificates[0]
-	fmt.Printf("Serving Cert [%s -> %s] %s subj %s (iss %s %s) ca %t\n",
-		TimeStyle.Render(servingCert.NotBefore.Format(TimeFmt)), TimeStyle.Render(servingCert.NotAfter.Format(TimeFmt)),
-		servingCert.PublicKeyAlgorithm, AddrStyle.Render(servingCert.Subject.String()),
-		AddrStyle.Render(renderIssuer(servingCert)), servingCert.SignatureAlgorithm,
-		servingCert.IsCA,
-	)
-	fmt.Printf("\tDNS SANs %s\n", AddrStyle.Render(strings.Join(servingCert.DNSNames, ",")))
-	fmt.Printf("\tIP SANs %s\n", AddrStyle.Render(strings.Join(ips2str(servingCert.IPAddresses), ",")))
-	if !nameInSans(host, servingCert.DNSNames) { // TODO if it's an IP, check against IP SANs instead
-		fmt.Printf("\t%s given name %s not in SANs\n", SWarning, host)
-	}
+	fmt.Println("Serving Cert")
+	fmt.Println(RenderCertBasics(servingCert))
+	fmt.Printf("\tDNS SANs %s\n", RenderList(servingCert.DNSNames))
+	fmt.Printf("\tIP SANs %s\n", RenderList(ips2str(servingCert.IPAddresses)))
 
-	if len(cs.OCSPResponse) > 0 {
-		fmt.Printf("\t%s OSCP info stapled to response\n", SInfo)
-	}
+	fmt.Printf("\tGiven host %s in SANs? %s\n", host, YesNo(nameInSans(host, servingCert.DNSNames))) // TODO if it's an IP, check against IP SANs instead
+
+	fmt.Printf("\tHSTS? %s\n", YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
+
+	fmt.Printf("\tOCSP info stapled to response? %s\n", YesNo(len(cs.OCSPResponse) > 0))
+
+	fmt.Println()
 
 	fmt.Printf("Cert chain\n")
 	// TODO render first and subsequent certs differently (don't care about SANs on signers)
 	for _, cert := range cs.PeerCertificates[1:] {
-		fmt.Printf("\tCert [%s -> %s] %s subj %s (iss %s %s) ca %t\n",
-			TimeStyle.Render(cert.NotBefore.Format(TimeFmt)), TimeStyle.Render(cert.NotAfter.Format(TimeFmt)),
-			cert.PublicKeyAlgorithm, AddrStyle.Render(cert.Subject.String()),
-			AddrStyle.Render(renderIssuer(cert)), cert.SignatureAlgorithm,
-			cert.IsCA,
-		)
+		fmt.Println(RenderCertBasics(cert))
 	}
 	if len(cs.VerifiedChains) > 0 {
 		// TODO: add cs.VerifidChains, which adds the certs from the local store that the presented certs (above) were verified against
@@ -163,12 +158,7 @@ func CheckTls2(l4Addr string, host string) {
 			panic("multiple chains")
 		}
 		for _, cert := range cs.VerifiedChains[0] {
-			fmt.Printf("\tCert [%s -> %s] %s subj %s (iss %s %s) ca %t\n",
-				TimeStyle.Render(cert.NotBefore.Format(TimeFmt)), TimeStyle.Render(cert.NotAfter.Format(TimeFmt)),
-				cert.PublicKeyAlgorithm, AddrStyle.Render(cert.Subject.String()),
-				AddrStyle.Render(renderIssuer(cert)), cert.SignatureAlgorithm,
-				cert.IsCA,
-			)
+			fmt.Println(RenderCertBasics(cert))
 		}
 	}
 
@@ -176,9 +166,7 @@ func CheckTls2(l4Addr string, host string) {
 
 	fmt.Printf("<= %s %s\n", resp.Proto, resp.Status)
 
-	// TODO: HSTS (is a header?)
-
-	// TODO: cors headers
+	// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
 
 	fmt.Printf("\t%s %d bytes of %s from %s\n", SInfo, resp.ContentLength, resp.Header.Get("content-type"), resp.Header.Get("server"))
 	if resp.Uncompressed {
