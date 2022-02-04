@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -164,18 +165,18 @@ func CheckTls2(l4Addr string, host string) {
 
 	fmt.Println()
 
-	fmt.Printf("<= %s %s\n", resp.Proto, resp.Status)
+	fmt.Printf("%s %s\n", BrightStyle.Render(resp.Proto), BrightStyle.Render(resp.Status))
 
 	// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
 
-	fmt.Printf("\t%s %d bytes of %s from %s\n", SInfo, resp.ContentLength, resp.Header.Get("content-type"), resp.Header.Get("server"))
+	fmt.Printf("\t%d bytes of %s from %s\n", resp.ContentLength, BrightStyle.Render(resp.Header.Get("content-type")), BrightStyle.Render(resp.Header.Get("server")))
 	if resp.Uncompressed {
 		fmt.Printf("\t%s Note: content was transparently decompressed; length information will not be accurate\n")
 	}
 
 	rawBody, err := ioutil.ReadAll(resp.Body)
 	CheckErr(err)
-	fmt.Printf("\t%s %d bytes actual body read\n", SInfo, len(rawBody))
+	fmt.Printf("\t%s bytes actual body read\n", BrightStyle.Render(strconv.FormatInt(int64(len(rawBody)), 10)))
 }
 
 func renderIssuer(cert *x509.Certificate) string {
