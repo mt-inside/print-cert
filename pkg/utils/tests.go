@@ -122,7 +122,12 @@ func CheckTls2(addr string, port string, sni string, host string) {
 	}
 	req, err := http.NewRequest("GET", l7Addr.String(), nil)
 	CheckErr(err)
-	req.Host = hostPort
+	// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
+	if port == "443" {
+		req.Host = host
+	} else {
+		req.Host = hostPort
+	}
 	resp, err := client.Do(req)
 	CheckErr(err)
 	defer resp.Body.Close()
@@ -174,7 +179,7 @@ func CheckTls2(addr string, port string, sni string, host string) {
 
 	Banner("HTTP")
 
-	fmt.Printf("%s HTTP request %s %s (Host %s)...\n", STrying, AddrStyle.Render(req.Method), AddrStyle.Render(req.URL.Path), AddrStyle.Render(hostPort))
+	fmt.Printf("%s HTTP request %s %s (Host %s)...\n", STrying, AddrStyle.Render(req.Method), AddrStyle.Render(req.URL.Path), AddrStyle.Render(req.Host))
 
 	fmt.Printf("%s", BrightStyle.Render(resp.Proto))
 	if resp.StatusCode < 400 {
