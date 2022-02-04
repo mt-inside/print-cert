@@ -25,6 +25,14 @@ var (
 	SError   = FailStyle.Render("Error:")
 )
 
+func CheckInfo(err error) bool {
+	if err != nil {
+		fmt.Printf("%s %v\n", SInfo, err)
+		return false
+	}
+	return true
+}
+
 func CheckWarn(err error) bool {
 	if err != nil {
 		fmt.Printf("%s %v\n", SWarning, err)

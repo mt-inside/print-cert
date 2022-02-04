@@ -19,7 +19,7 @@ func CheckDns(name string) net.IP {
 		return net.IPv4(0, 0, 0, 0)
 	}
 	if len(ips) > 1 {
-		CheckErr(errors.New("host resolves to >1 IP"))
+		CheckInfo(errors.New("Host resolves to >1 IP, using first"))
 	}
 	ip := ips[0]
 	fmt.Printf("Name %v is %s\n", AddrStyle.Render(name), AddrStyle.Render(ip.String()))
@@ -33,7 +33,7 @@ func CheckRevDns(ip net.IP) string {
 		return "<NXDOMAIN>"
 	}
 	if len(names) > 1 {
-		CheckErr(errors.New("IP resolves to >1 host"))
+		CheckInfo(errors.New("IP resolves to >1 host, using first"))
 	}
 	revName := names[0]
 	fmt.Printf("%s reverses to %s\n", AddrStyle.Render(ip.String()), AddrStyle.Render(revName))
