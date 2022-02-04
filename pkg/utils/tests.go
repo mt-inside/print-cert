@@ -152,7 +152,7 @@ func CheckTls2(addr string, port string, sni string, host string) {
 
 	fmt.Println()
 
-	fmt.Printf("Cert chain\n")
+	fmt.Printf("Presented cert chain\n")
 	// TODO render first and subsequent certs differently (don't care about SANs on signers)
 	for _, cert := range cs.PeerCertificates[1:] {
 		fmt.Println(RenderCertBasics(cert))
