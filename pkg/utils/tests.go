@@ -165,7 +165,14 @@ func CheckTls2(l4Addr string, host string) {
 
 	fmt.Println()
 
-	fmt.Printf("%s %s\n", BrightStyle.Render(resp.Proto), BrightStyle.Render(resp.Status))
+	fmt.Printf("%s", BrightStyle.Render(resp.Proto))
+	if resp.StatusCode < 400 {
+		fmt.Printf(" %s\n", OkStyle.Render(resp.Status))
+	} else if resp.StatusCode < 500 {
+		fmt.Printf(" %s\n", WarnStyle.Render(resp.Status))
+	} else {
+		fmt.Printf(" %s\n", FailStyle.Render(resp.Status))
+	}
 
 	// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
 
