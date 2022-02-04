@@ -92,12 +92,12 @@ func CheckTls(l4Addr string, host string) {
 	}
 }
 
-func CheckTls2(l4Addr string, host string) {
+func CheckTls2(addr string, port string, sni string, host string) {
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
-				ServerName:         host, // SNI for TLS vhosting
+				ServerName:         sni, // SNI for TLS vhosting
 			},
 			ForceAttemptHTTP2:     true,            // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
 			TLSHandshakeTimeout:   1 * time.Second, // assume this includes TCP handshake
@@ -110,16 +110,19 @@ func CheckTls2(l4Addr string, host string) {
 		},
 	}
 
-	fmt.Printf("%s TLS handshake with %s (SNI ServerName %s, HTTP Host %s)...\n", STrying, AddrStyle.Render(l4Addr), AddrStyle.Render(host), AddrStyle.Render(l4Addr))
+	addrPort := net.JoinHostPort(addr, port)
+	hostPort := net.JoinHostPort(host, port)
+
+	fmt.Printf("%s TLS handshake with %s (SNI ServerName %s, HTTP Host %s)...\n", STrying, AddrStyle.Render(addrPort), AddrStyle.Render(sni), AddrStyle.Render(hostPort))
 	// TODO: not negoiating h2, looks like its sending no ALPN (and if we manually do it barfs on a binary response with i think is h2 when it's only expecting h1.1). Use go/x/net/http2 to do http2
 	l7Addr := url.URL{
 		Scheme: "https",
-		Host:   l4Addr,
+		Host:   addrPort,
 		Path:   "/",
 	}
 	req, err := http.NewRequest("GET", l7Addr.String(), nil)
 	CheckErr(err)
-	req.Host = l4Addr
+	req.Host = hostPort
 	resp, err := client.Do(req)
 	CheckErr(err)
 	defer resp.Body.Close()
