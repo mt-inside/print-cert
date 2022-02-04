@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 
-	"bitbucket.mwam.local/infra/lb-checker/pkg/utils"
 	. "bitbucket.mwam.local/infra/lb-checker/pkg/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -75,7 +74,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	if sni == "" {
 		sni = host
 	}
-	utils.CheckTls2(addr, port, sni, host)
+	CheckTls2(addr, port, sni, host)
 
 	/* Fin */
 
