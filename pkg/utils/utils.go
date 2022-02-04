@@ -48,7 +48,7 @@ func RenderOptionalString(s string) string {
 	if s == "" {
 		return InfoStyle.Render("<none>")
 	}
-	return AddrStyle.Render(s)
+	return BrightStyle.Render(s)
 }
 
 func RenderCertBasics(cert *x509.Certificate) string {
