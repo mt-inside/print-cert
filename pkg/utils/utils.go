@@ -52,10 +52,10 @@ func RenderOptionalString(s string) string {
 }
 
 func RenderCertBasics(cert *x509.Certificate) string {
-	return fmt.Sprintf("\t[%s -> %s] %s subj %s (iss %s %s) ca %t",
+	return fmt.Sprintf("\t[%s -> %s] %s subj %s ca %t",
 		TimeStyle.Render(cert.NotBefore.Format(TimeFmt)), TimeStyle.Render(cert.NotAfter.Format(TimeFmt)),
 		BrightStyle.Render(cert.PublicKeyAlgorithm.String()), AddrStyle.Render(cert.Subject.String()),
-		AddrStyle.Render(renderIssuer(cert)), BrightStyle.Render(cert.SignatureAlgorithm.String()),
+		// No need to print Issuer, cause that's the Subject of the next cert in the chain
 		cert.IsCA,
 	)
 }
