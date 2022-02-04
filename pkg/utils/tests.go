@@ -3,6 +3,7 @@ package utils
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -76,7 +77,7 @@ func CheckTls(l4Addr string, host string) {
 	fmt.Printf("\tSANs: DNS %s, IPs %s\n",
 		AddrStyle.Render(strings.Join(servingCert.DNSNames, ",")), AddrStyle.Render(strings.Join(ips2str(servingCert.IPAddresses), ",")),
 	)
-	if !nameInSans(host, servingCert.DNSNames) { // TODO if it's an IP, check against IP SANs instead
+	if !nameInCert(host, servingCert.Subject, servingCert.DNSNames) { // TODO if it's an IP, check against IP SANs instead
 		fmt.Printf("\t%s given name %s not in SANs\n", SWarning, host)
 	}
 
@@ -114,7 +115,6 @@ func CheckTls2(addr string, port string, sni string, host string) {
 	hostPort := net.JoinHostPort(host, port)
 
 	fmt.Printf("%s TLS handshake with %s (SNI ServerName %s, HTTP Host %s)...\n", STrying, AddrStyle.Render(addrPort), AddrStyle.Render(sni), AddrStyle.Render(hostPort))
-	// TODO: not negoiating h2, looks like its sending no ALPN (and if we manually do it barfs on a binary response with i think is h2 when it's only expecting h1.1). Use go/x/net/http2 to do http2
 	l7Addr := url.URL{
 		Scheme: "https",
 		Host:   addrPort,
@@ -142,7 +142,9 @@ func CheckTls2(addr string, port string, sni string, host string) {
 	fmt.Printf("\tDNS SANs %s\n", RenderList(servingCert.DNSNames))
 	fmt.Printf("\tIP SANs %s\n", RenderList(ips2str(servingCert.IPAddresses)))
 
-	fmt.Printf("\tGiven host %s in SANs? %s\n", host, YesNo(nameInSans(host, servingCert.DNSNames))) // TODO if it's an IP, check against IP SANs instead
+	// TODO: take the subject too, parse it, check the CN value too
+	// TODO if it's an IP, check against IP SANs instead
+	fmt.Printf("\tGiven host %s in SANs? %s\n", host, YesNo(nameInCert(host, servingCert.Subject, servingCert.DNSNames)))
 
 	fmt.Printf("\tHSTS? %s\n", YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
 
@@ -166,7 +168,11 @@ func CheckTls2(addr string, port string, sni string, host string) {
 		}
 	}
 
-	fmt.Println()
+	/* HTTP */
+
+	Banner("HTTP")
+
+	fmt.Printf("%s HTTP request %s %s (Host %s)...\n", STrying, AddrStyle.Render(req.Method), AddrStyle.Render(req.URL.Path), AddrStyle.Render(hostPort))
 
 	fmt.Printf("%s", BrightStyle.Render(resp.Proto))
 	if resp.StatusCode < 400 {
@@ -204,7 +210,10 @@ func ips2str(ips []net.IP) []string {
 	return ipStrs
 }
 
-func nameInSans(name string, sans []string) bool {
+func nameInCert(name string, subj pkix.Name, sans []string) bool {
+	if name == subj.CommonName {
+		return true
+	}
 	for _, san := range sans {
 		if san == name {
 			return true
