@@ -157,6 +157,8 @@ func CheckTls2(addr string, port string, sni string, host string) {
 	for _, cert := range cs.PeerCertificates[1:] {
 		fmt.Println(RenderCertBasics(cert))
 	}
+	fmt.Printf("\t\tissuer: %s\n", AddrStyle.Render(renderIssuer(cs.PeerCertificates[len(cs.PeerCertificates)-1])))
+
 	if len(cs.VerifiedChains) > 0 {
 		// TODO: add cs.VerifidChains, which adds the certs from the local store that the presented certs (above) were verified against
 		panic("first time we've seen this, check it works")
