@@ -35,8 +35,10 @@ func main() {
 	if ip == nil {
 		host = addr
 		ip = CheckDns(host)
+		CheckRevDns(ip)
 	} else {
 		host = CheckRevDns(ip)
+		CheckDns(host)
 	}
 
 	/* Check DNS */
