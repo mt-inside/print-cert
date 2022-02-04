@@ -7,6 +7,8 @@ import (
 
 	"bitbucket.mwam.local/infra/lb-checker/pkg/utils"
 	. "bitbucket.mwam.local/infra/lb-checker/pkg/utils"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 /* TODO
@@ -20,27 +22,38 @@ import (
 
 func main() {
 
-	if len(os.Args) != 3 {
-		fmt.Println("Usage: addr port")
-		os.Exit(1)
+	cmd := &cobra.Command{
+		Use:  "addr port",
+		Args: cobra.ExactArgs(2),
+		Run:  appMain,
 	}
 
-	addr := os.Args[1]
-	port := os.Args[2]
+	cmd.Flags().StringP("sni", "s", "", "SNI ServerName")
+	cmd.Flags().StringP("host", "a", "", "HTTP Host / :authority header")
+	viper.BindPFlag("sni", cmd.Flags().Lookup("sni"))
+	viper.BindPFlag("host", cmd.Flags().Lookup("host"))
+
+	CheckErr(cmd.Execute())
+}
+
+func appMain(cmd *cobra.Command, args []string) {
+
+	addr := args[0]
+	port := args[1]
 
 	var ip net.IP
-	var host string
+	var name string
 
 	Banner("DNS")
 
 	ip = net.ParseIP(addr)
 	if ip == nil {
-		host = addr
-		ip = CheckDns(host)
+		name = addr
+		ip = CheckDns(name)
 		CheckRevDns(ip)
 	} else {
-		host = CheckRevDns(ip)
-		CheckDns(host)
+		name = CheckRevDns(ip)
+		CheckDns(name)
 	}
 
 	Banner("TLS")
@@ -54,8 +67,15 @@ func main() {
 
 	/* Check F5 */
 
-	tcpAddr := net.JoinHostPort(addr, port)
-	utils.CheckTls2(tcpAddr, addr) // TODO support -h host, for when giving an ip
+	host := viper.GetString("host")
+	if host == "" {
+		host = addr
+	}
+	sni := viper.GetString("sni")
+	if sni == "" {
+		sni = host
+	}
+	utils.CheckTls2(addr, port, sni, host)
 
 	/* Fin */
 
