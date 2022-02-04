@@ -114,7 +114,7 @@ func CheckTls2(addr string, port string, sni string, host string) {
 	addrPort := net.JoinHostPort(addr, port)
 	hostPort := net.JoinHostPort(host, port)
 
-	fmt.Printf("%s TLS handshake with %s (SNI ServerName %s, HTTP Host %s)...\n", STrying, AddrStyle.Render(addrPort), AddrStyle.Render(sni), AddrStyle.Render(hostPort))
+	fmt.Printf("%s TLS handshake with %s (SNI ServerName %s)...\n", STrying, AddrStyle.Render(addrPort), AddrStyle.Render(sni))
 	l7Addr := url.URL{
 		Scheme: "https",
 		Host:   addrPort,
