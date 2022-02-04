@@ -46,9 +46,9 @@ func RenderList(ss []string) string {
 
 func RenderOptionalString(s string) string {
 	if s == "" {
-		return "<none>"
+		return InfoStyle.Render("<none>")
 	}
-	return s
+	return AddrStyle.Render(s)
 }
 
 func RenderCertBasics(cert *x509.Certificate) string {
