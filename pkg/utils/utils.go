@@ -1,13 +1,15 @@
 package utils
 
 import (
+	"crypto/x509"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
-const TimeFmt = "Jan _2 15:04:05 2006"
+const TimeFmt = "2006 Jan _2 15:04:05"
 
 var (
 	BrightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
@@ -23,7 +25,40 @@ var (
 	SOk      = OkStyle.Render("Ok:")
 	SWarning = WarnStyle.Render("Warning:")
 	SError   = FailStyle.Render("Error:")
+
+	SYes = OkStyle.Render("yes")
+	SNo  = FailStyle.Render("no")
 )
+
+func YesNo(test bool) string {
+	if test {
+		return SYes
+	}
+	return SNo
+}
+
+func RenderList(ss []string) string {
+	if len(ss) == 0 {
+		return InfoStyle.Render("<none>")
+	}
+	return AddrStyle.Render(strings.Join(ss, ", "))
+}
+
+func RenderOptionalString(s string) string {
+	if s == "" {
+		return "<none>"
+	}
+	return s
+}
+
+func RenderCertBasics(cert *x509.Certificate) string {
+	return fmt.Sprintf("\t[%s -> %s] %s subj %s (iss %s %s) ca %t",
+		TimeStyle.Render(cert.NotBefore.Format(TimeFmt)), TimeStyle.Render(cert.NotAfter.Format(TimeFmt)),
+		BrightStyle.Render(cert.PublicKeyAlgorithm.String()), AddrStyle.Render(cert.Subject.String()),
+		AddrStyle.Render(renderIssuer(cert)), BrightStyle.Render(cert.SignatureAlgorithm.String()),
+		cert.IsCA,
+	)
+}
 
 func CheckInfo(err error) bool {
 	if err != nil {
