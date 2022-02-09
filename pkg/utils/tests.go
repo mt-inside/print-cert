@@ -98,6 +98,7 @@ func CheckTls2(addr string, port string, sni string, host string) {
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
+				Renegotiation:      tls.RenegotiateOnceAsClient,
 				ServerName:         sni, // SNI for TLS vhosting
 			},
 			ForceAttemptHTTP2:     true,            // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
