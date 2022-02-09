@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -51,9 +52,27 @@ func RenderOptionalString(s string) string {
 	return BrightStyle.Render(s)
 }
 
+func RenderTime(t time.Time, start bool) string {
+	if start {
+		if t.After(time.Now()) {
+			return FailStyle.Render(t.Format(TimeFmt))
+		} else {
+			return OkStyle.Render(t.Format(TimeFmt))
+		}
+	} else {
+		if t.Before(time.Now()) {
+			return FailStyle.Render(t.Format(TimeFmt))
+		} else if t.Before(time.Now().Add(240 * time.Hour)) {
+			return WarnStyle.Render(t.Format(TimeFmt))
+		} else {
+			return OkStyle.Render(t.Format(TimeFmt))
+		}
+	}
+}
+
 func RenderCertBasics(cert *x509.Certificate) string {
 	return fmt.Sprintf("\t[%s -> %s] %s subj %s ca %t",
-		TimeStyle.Render(cert.NotBefore.Format(TimeFmt)), TimeStyle.Render(cert.NotAfter.Format(TimeFmt)),
+		RenderTime(cert.NotBefore, true), RenderTime(cert.NotAfter, false),
 		BrightStyle.Render(cert.PublicKeyAlgorithm.String()), AddrStyle.Render(cert.Subject.String()),
 		// No need to print Issuer, cause that's the Subject of the next cert in the chain
 		cert.IsCA,
