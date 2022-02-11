@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mt-inside/go-usvc"
 )
 
 func CheckDns(name string) net.IP {
@@ -94,17 +96,35 @@ func CheckTls(l4Addr string, host string) {
 }
 
 func CheckTls2(addr string, port string, sni string, host string) {
+	log := usvc.GetLogger(false) // TODO move me to main
+
 	client := &http.Client{
 		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second, // assume this is just the TLS handshake ie tcp handshake is covered bby the dialer
+			ResponseHeaderTimeout: 10 * time.Second,
+			DisableCompression:    true,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 				Renegotiation:      tls.RenegotiateOnceAsClient,
 				ServerName:         sni, // SNI for TLS vhosting
+				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+					panic(errors.New("asked for a client cert TODO"))
+				},
+				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+					log.V(1).Info("TLS built-in cert verification finished")
+					return nil // can do extra cert verification and reject
+				},
+				VerifyConnection: func(cs tls.ConnectionState) error {
+					log.V(1).Info("TLS: all cert verification finished")
+
+					return nil // can inspect all connection and TLS info and reject
+				},
 			},
-			ForceAttemptHTTP2:     true,            // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
-			TLSHandshakeTimeout:   1 * time.Second, // assume this includes TCP handshake
-			ResponseHeaderTimeout: 5 * time.Second,
-			DisableCompression:    true,
+			ForceAttemptHTTP2: true, // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			fmt.Printf("\t%s Redirected to %s\n", SInfo, AddrStyle.Render(req.URL.String()))
@@ -132,6 +152,9 @@ func CheckTls2(addr string, port string, sni string, host string) {
 	resp, err := client.Do(req)
 	CheckErr(err)
 	defer resp.Body.Close()
+
+	/* TLS */
+	// Morally it would be nice to have this in the appropriate callback, but HSTS header isn't available there, and it can't fail between there and here.
 
 	fmt.Println()
 
