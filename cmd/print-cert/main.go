@@ -6,6 +6,7 @@ import (
 	"os"
 
 	. "bitbucket.mwam.local/infra/lb-checker/pkg/utils"
+	"github.com/mt-inside/go-usvc"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -29,13 +30,21 @@ func main() {
 
 	cmd.Flags().StringP("sni", "s", "", "SNI ServerName")
 	cmd.Flags().StringP("host", "a", "", "HTTP Host / :authority header")
+	cmd.Flags().StringP("cert", "c", "", "Path to TLS certificate file")
+	cmd.Flags().StringP("key", "k", "", "Path to TLS key file")
+	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
 	viper.BindPFlag("sni", cmd.Flags().Lookup("sni"))
 	viper.BindPFlag("host", cmd.Flags().Lookup("host"))
+	viper.BindPFlag("cert", cmd.Flags().Lookup("cert"))
+	viper.BindPFlag("key", cmd.Flags().Lookup("key"))
+	viper.BindPFlag("printBody", cmd.Flags().Lookup("print-body"))
 
 	CheckErr(cmd.Execute())
 }
 
 func appMain(cmd *cobra.Command, args []string) {
+
+	log := usvc.GetLogger(false)
 
 	addr := args[0]
 	port := args[1]
@@ -74,7 +83,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	if sni == "" {
 		sni = host
 	}
-	CheckTls2(addr, port, sni, host)
+	CheckTls2(log, addr, port, sni, host, viper.GetString("cert"), viper.GetString("key"), viper.GetBool("printBody"))
 
 	/* Fin */
 

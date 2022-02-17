@@ -2,16 +2,16 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"io/ioutil"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"time"
 
+	"github.com/mt-inside/go-usvc"
 	dmp "github.com/sergi/go-diff/diffmatchpatch"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"bitbucket.mwam.local/infra/lb-checker/pkg/utils"
 	. "bitbucket.mwam.local/infra/lb-checker/pkg/utils"
@@ -19,13 +19,28 @@ import (
 
 func main() {
 
-	if len(os.Args) != 5 {
-		fmt.Println("Usage: f5Host nsIP port scheme")
-		os.Exit(1)
+	cmd := &cobra.Command{
+		Use:  "f5Name nsIP port scheme",
+		Args: cobra.ExactArgs(4),
+		Run:  appMain,
 	}
 
-	f5Host := os.Args[1]
-	nsIp := net.ParseIP(os.Args[2])
+	cmd.Flags().StringP("cert", "c", "", "Path to TLS certificate file")
+	cmd.Flags().StringP("key", "k", "", "Path to TLS key file")
+	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
+	viper.BindPFlag("cert", cmd.Flags().Lookup("cert"))
+	viper.BindPFlag("key", cmd.Flags().Lookup("key"))
+	viper.BindPFlag("printBody", cmd.Flags().Lookup("print-body"))
+
+	CheckErr(cmd.Execute())
+}
+
+func appMain(cmd *cobra.Command, args []string) {
+
+	log := usvc.GetLogger(false, 0)
+
+	f5Host := args[0]
+	nsIp := net.ParseIP(args[1])
 	port := os.Args[3]
 	scheme := os.Args[4]
 
@@ -61,7 +76,7 @@ func main() {
 	case "http":
 		checkTcp(f5L4Addr)
 	case "https":
-		utils.CheckTls(f5L4Addr, f5Host)
+		utils.CheckTls(log, f5L4Addr, f5Host, viper.GetString("cert"), viper.GetString("key"))
 	}
 
 	f5L7Addr := &url.URL{
@@ -69,7 +84,7 @@ func main() {
 		Host:   f5L4Addr,
 		Path:   "/",
 	}
-	checkHttp(f5L7Addr, f5Host)
+	utils.CheckHttp(log, f5L7Addr, f5Host, viper.GetString("cert"), viper.GetString("key"))
 
 	/* Check NetScaler */
 
@@ -80,7 +95,7 @@ func main() {
 	case "http":
 		checkTcp(nsL4Addr)
 	case "https":
-		utils.CheckTls(nsL4Addr, f5Host)
+		utils.CheckTls(log, nsL4Addr, f5Host, viper.GetString("cert"), viper.GetString("key"))
 	}
 
 	nsL7Addr := &url.URL{
@@ -88,14 +103,19 @@ func main() {
 		Host:   nsL4Addr,
 		Path:   "/",
 	}
-	checkHttp(nsL7Addr, f5Host)
+	utils.CheckHttp(log, nsL7Addr, f5Host, viper.GetString("cert"), viper.GetString("key"))
 
 	/* Body diff */
 
 	Banner("Differences")
 
-	f5Body := getBody(f5L7Addr, f5Host)
-	nsBody := getBody(nsL7Addr, f5Host)
+	f5Body := utils.GetBody(log, f5L7Addr, f5Host, viper.GetString("cert"), viper.GetString("key"))
+	nsBody := utils.GetBody(log, nsL7Addr, f5Host, viper.GetString("cert"), viper.GetString("key"))
+
+	if viper.GetBool("printBody") {
+		fmt.Println("NETSCALER response body:")
+		fmt.Println(nsBody)
+	}
 
 	differ := dmp.New()
 	diffs := differ.DiffMain(f5Body, nsBody, true)
@@ -133,54 +153,6 @@ func checkTcp(l4Addr string) {
 	}
 	defer conn.Close()
 	fmt.Printf("%s established TCP connection with %s\n", OkStyle.Render("Ok:"), AddrStyle.Render(l4Addr))
-}
-
-func httpGetSniHost(l7Addr *url.URL, host string) (*http.Response, []byte) {
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				ServerName: host, // SNI
-			},
-		},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			fmt.Printf("\t%s Redirected to %s\n", SInfo, AddrStyle.Render(req.URL.String()))
-			return nil
-		},
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", l7Addr.String(), nil)
-	CheckErr(err)
-	req.Host = host
-
-	resp, err := client.Do(req)
-	CheckErr(err)
-	defer resp.Body.Close()
-
-	// Have to read the body before we cancel the request context
-	rawBody, err := ioutil.ReadAll(resp.Body)
-	CheckErr(err)
-
-	return resp, rawBody
-}
-
-func checkHttp(l7Addr *url.URL, host string) {
-	fmt.Printf("%s HTTP GET for %s with SNI %s, HTTP host: %s...\n", STrying, AddrStyle.Render(l7Addr.String()), AddrStyle.Render(host), AddrStyle.Render(host))
-
-	resp, _ := httpGetSniHost(l7Addr, host)
-
-	fmt.Printf("%s HTTP GET for %s => %s\n", SOk, AddrStyle.Render(l7Addr.String()), InfoStyle.Render(resp.Status))
-	fmt.Printf("\t%s %d bytes of %s from %s\n", SInfo, resp.ContentLength, resp.Header.Get("content-type"), resp.Header.Get("server"))
-}
-
-func getBody(l7Addr *url.URL, host string) string {
-	_, rawBody := httpGetSniHost(l7Addr, host)
-
-	fmt.Printf("\t%s actual body length %d\n", SInfo, len(rawBody))
-
-	return string(rawBody)
 }
 
 /*

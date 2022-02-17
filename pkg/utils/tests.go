@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -14,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mt-inside/go-usvc"
+	"github.com/go-logr/logr"
 )
 
 func CheckDns(name string) net.IP {
@@ -45,17 +46,71 @@ func CheckRevDns(ip net.IP) string {
 	return revName
 }
 
-// TODO does single-ip need this, or can it just use CheckTls2?
-func CheckTls(l4Addr string, host string) {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-			ServerName:         host, // SNI for TLS vhosting
+// TODO make this in the main()s and pass it through instead
+func getHttpClient(log logr.Logger, sni, certPath, keyPath string) *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second, // assume this is just the TLS handshake ie tcp handshake is covered bby the dialer
+			ResponseHeaderTimeout: 10 * time.Second,
+			DisableCompression:    true,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+				Renegotiation:      tls.RenegotiateOnceAsClient,
+				ServerName:         sni, // SNI for TLS vhosting
+				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+					log.Info("Asked for a client certificate")
+
+					if certPath == "" || keyPath == "" {
+						panic(errors.New("Need to provide a path to key and cert"))
+					}
+					pair, err := tls.LoadX509KeyPair(certPath, keyPath)
+
+					fmt.Println("Presenting client cert chain")
+					if err == nil {
+						var certs []*x509.Certificate
+						for _, bytes := range pair.Certificate {
+							cert, _ := x509.ParseCertificate(bytes)
+							certs = append(certs, cert)
+						}
+
+						fmt.Println(RenderCertBasics(certs[0]))
+						fmt.Printf("Cert chain\n")
+						for _, cert := range certs[1:] {
+							fmt.Println(RenderCertBasics(cert))
+						}
+						fmt.Printf("\t\tissuer: %s\n", AddrStyle.Render(renderIssuer(certs[len(certs)-1])))
+					}
+
+					return &pair, err
+				},
+				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+					log.V(1).Info("TLS built-in cert verification finished")
+
+					return nil // can do extra cert verification and reject
+				},
+				VerifyConnection: func(cs tls.ConnectionState) error {
+					log.V(1).Info("TLS: all cert verification finished")
+
+					return nil // can inspect all connection and TLS info and reject
+				},
+			},
+			ForceAttemptHTTP2: true, // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
 		},
-		TLSHandshakeTimeout:   1 * time.Second, // assume this includes TCP handshake
-		ResponseHeaderTimeout: 5 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			fmt.Printf("\t%s Redirected to %s\n", SInfo, AddrStyle.Render(req.URL.String()))
+			return nil
+		},
 	}
-	client := &http.Client{Transport: tr}
+
+}
+
+// TODO does single-ip need this, or can it just use CheckTls2?
+func CheckTls(log logr.Logger, l4Addr, host, certPath, keyPath string) {
+	client := getHttpClient(log, host, certPath, keyPath)
 
 	fmt.Printf("%s TLS handshake with %s (SNI ServerName %s)...\n", STrying, AddrStyle.Render(l4Addr), AddrStyle.Render(host))
 	// TODO use context
@@ -95,42 +150,9 @@ func CheckTls(l4Addr string, host string) {
 	}
 }
 
-func CheckTls2(addr string, port string, sni string, host string) {
-	log := usvc.GetLogger(false) // TODO move me to main
+func CheckTls2(log logr.Logger, addr string, port string, sni string, host string, certPath, keyPath string, printBody bool) {
 
-	client := &http.Client{
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   10 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout:   10 * time.Second, // assume this is just the TLS handshake ie tcp handshake is covered bby the dialer
-			ResponseHeaderTimeout: 10 * time.Second,
-			DisableCompression:    true,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-				Renegotiation:      tls.RenegotiateOnceAsClient,
-				ServerName:         sni, // SNI for TLS vhosting
-				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-					panic(errors.New("asked for a client cert TODO"))
-				},
-				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-					log.V(1).Info("TLS built-in cert verification finished")
-					return nil // can do extra cert verification and reject
-				},
-				VerifyConnection: func(cs tls.ConnectionState) error {
-					log.V(1).Info("TLS: all cert verification finished")
-
-					return nil // can inspect all connection and TLS info and reject
-				},
-			},
-			ForceAttemptHTTP2: true, // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
-		},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			fmt.Printf("\t%s Redirected to %s\n", SInfo, AddrStyle.Render(req.URL.String()))
-			return nil
-		},
-	}
+	client := getHttpClient(log, sni, certPath, keyPath)
 
 	addrPort := net.JoinHostPort(addr, port)
 	hostPort := net.JoinHostPort(host, port)
@@ -226,6 +248,48 @@ func CheckTls2(addr string, port string, sni string, host string) {
 	rawBody, err := ioutil.ReadAll(resp.Body)
 	CheckErr(err)
 	fmt.Printf("\tactual %s bytes of body read\n", BrightStyle.Render(strconv.FormatInt(int64(len(rawBody)), 10)))
+
+	if printBody {
+		fmt.Println(string(rawBody))
+	}
+}
+
+func httpGetSniHost(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string) (*http.Response, []byte) {
+	client := getHttpClient(log, host, certPath, keyPath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", l7Addr.String(), nil)
+	CheckErr(err)
+	req.Host = host
+
+	resp, err := client.Do(req)
+	CheckErr(err)
+	defer resp.Body.Close()
+
+	// Have to read the body before we cancel the request context
+	rawBody, err := ioutil.ReadAll(resp.Body)
+	CheckErr(err)
+
+	return resp, rawBody
+}
+
+func CheckHttp(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string) {
+	fmt.Printf("%s HTTP GET for %s with SNI %s, HTTP host: %s...\n", STrying, AddrStyle.Render(l7Addr.String()), AddrStyle.Render(host), AddrStyle.Render(host))
+
+	resp, _ := httpGetSniHost(log, l7Addr, host, certPath, keyPath)
+
+	fmt.Printf("%s HTTP GET for %s => %s\n", SOk, AddrStyle.Render(l7Addr.String()), InfoStyle.Render(resp.Status))
+	fmt.Printf("\t%s %d bytes of %s from %s\n", SInfo, resp.ContentLength, resp.Header.Get("content-type"), resp.Header.Get("server"))
+}
+
+func GetBody(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string) string {
+	_, rawBody := httpGetSniHost(log, l7Addr, host, certPath, keyPath)
+
+	fmt.Printf("\t%s actual body length %d\n", SInfo, len(rawBody))
+
+	return string(rawBody)
 }
 
 func renderIssuer(cert *x509.Certificate) string {
