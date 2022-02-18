@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MarshallWace/go-spnego"
 	"github.com/go-logr/logr"
 )
 
@@ -47,8 +48,8 @@ func CheckRevDns(ip net.IP) string {
 }
 
 // TODO make this in the main()s and pass it through instead
-func getHttpClient(log logr.Logger, sni, certPath, keyPath string) *http.Client {
-	return &http.Client{
+func getHttpClient(log logr.Logger, sni, certPath, keyPath string, krb bool) *http.Client {
+	c := &http.Client{
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
 				Timeout:   10 * time.Second,
@@ -106,11 +107,16 @@ func getHttpClient(log logr.Logger, sni, certPath, keyPath string) *http.Client 
 		},
 	}
 
+	if krb {
+		c.Transport = &spnego.Transport{Transport: *c.Transport.(*http.Transport)}
+	}
+
+	return c
 }
 
 // TODO does single-ip need this, or can it just use CheckTls2?
-func CheckTls(log logr.Logger, l4Addr, host, certPath, keyPath string) {
-	client := getHttpClient(log, host, certPath, keyPath)
+func CheckTls(log logr.Logger, l4Addr, host, certPath, keyPath string, krb bool) {
+	client := getHttpClient(log, host, certPath, keyPath, krb)
 
 	fmt.Printf("%s TLS handshake with %s (SNI ServerName %s)...\n", STrying, AddrStyle.Render(l4Addr), AddrStyle.Render(host))
 	// TODO use context
@@ -150,9 +156,9 @@ func CheckTls(log logr.Logger, l4Addr, host, certPath, keyPath string) {
 	}
 }
 
-func CheckTls2(log logr.Logger, addr string, port string, sni string, host string, certPath, keyPath string, printBody bool) {
+func CheckTls2(log logr.Logger, addr, port, sni, host, path, certPath, keyPath string, krb, printBody bool) {
 
-	client := getHttpClient(log, sni, certPath, keyPath)
+	client := getHttpClient(log, sni, certPath, keyPath, krb)
 
 	addrPort := net.JoinHostPort(addr, port)
 	hostPort := net.JoinHostPort(host, port)
@@ -161,7 +167,7 @@ func CheckTls2(log logr.Logger, addr string, port string, sni string, host strin
 	l7Addr := url.URL{
 		Scheme: "https",
 		Host:   addrPort,
-		Path:   "/",
+		Path:   path,
 	}
 	req, err := http.NewRequest("GET", l7Addr.String(), nil)
 	CheckErr(err)
@@ -254,8 +260,8 @@ func CheckTls2(log logr.Logger, addr string, port string, sni string, host strin
 	}
 }
 
-func httpGetSniHost(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string) (*http.Response, []byte) {
-	client := getHttpClient(log, host, certPath, keyPath)
+func httpGetSniHost(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string, krb bool) (*http.Response, []byte) {
+	client := getHttpClient(log, host, certPath, keyPath, krb)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -275,17 +281,17 @@ func httpGetSniHost(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath st
 	return resp, rawBody
 }
 
-func CheckHttp(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string) {
+func CheckHttp(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string, krb bool) {
 	fmt.Printf("%s HTTP GET for %s with SNI %s, HTTP host: %s...\n", STrying, AddrStyle.Render(l7Addr.String()), AddrStyle.Render(host), AddrStyle.Render(host))
 
-	resp, _ := httpGetSniHost(log, l7Addr, host, certPath, keyPath)
+	resp, _ := httpGetSniHost(log, l7Addr, host, certPath, keyPath, krb)
 
 	fmt.Printf("%s HTTP GET for %s => %s\n", SOk, AddrStyle.Render(l7Addr.String()), InfoStyle.Render(resp.Status))
 	fmt.Printf("\t%s %d bytes of %s from %s\n", SInfo, resp.ContentLength, resp.Header.Get("content-type"), resp.Header.Get("server"))
 }
 
-func GetBody(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string) string {
-	_, rawBody := httpGetSniHost(log, l7Addr, host, certPath, keyPath)
+func GetBody(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string, krb bool) string {
+	_, rawBody := httpGetSniHost(log, l7Addr, host, certPath, keyPath, krb)
 
 	fmt.Printf("\t%s actual body length %d\n", SInfo, len(rawBody))
 
