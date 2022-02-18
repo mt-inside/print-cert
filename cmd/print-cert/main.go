@@ -30,13 +30,17 @@ func main() {
 
 	cmd.Flags().StringP("sni", "s", "", "SNI ServerName")
 	cmd.Flags().StringP("host", "a", "", "HTTP Host / :authority header")
+	cmd.Flags().StringP("path", "p", "/", "HTTP path to request")
 	cmd.Flags().StringP("cert", "c", "", "Path to TLS certificate file")
 	cmd.Flags().StringP("key", "k", "", "Path to TLS key file")
+	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
 	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
 	viper.BindPFlag("sni", cmd.Flags().Lookup("sni"))
 	viper.BindPFlag("host", cmd.Flags().Lookup("host"))
+	viper.BindPFlag("path", cmd.Flags().Lookup("path"))
 	viper.BindPFlag("cert", cmd.Flags().Lookup("cert"))
 	viper.BindPFlag("key", cmd.Flags().Lookup("key"))
+	viper.BindPFlag("kerberos", cmd.Flags().Lookup("kerberos"))
 	viper.BindPFlag("printBody", cmd.Flags().Lookup("print-body"))
 
 	CheckErr(cmd.Execute())
@@ -83,7 +87,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	if sni == "" {
 		sni = host
 	}
-	CheckTls2(log, addr, port, sni, host, viper.GetString("cert"), viper.GetString("key"), viper.GetBool("printBody"))
+	CheckTls2(log, addr, port, sni, host, viper.GetString("path"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("printBody"))
 
 	/* Fin */
 
