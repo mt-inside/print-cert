@@ -170,11 +170,11 @@ func CheckTls2(log logr.Logger, addr, port, sni, host, path, certPath, keyPath s
 		panic(err)
 	}
 	l7Addr := url.URL{
-		Scheme:      "https",
-		Host:        addrPort,
-		RawPath:     pathParts.RawPath,
-		RawQuery:    pathParts.RawQuery,
-		RawFragment: pathParts.RawFragment,
+		Scheme:   "https",
+		Host:     addrPort,
+		Path:     pathParts.EscapedPath(),
+		RawQuery: pathParts.RawQuery,
+		Fragment: pathParts.EscapedFragment(),
 	}
 	req, err := http.NewRequest("GET", l7Addr.String(), nil)
 	CheckErr(err)
@@ -238,7 +238,7 @@ func CheckTls2(log logr.Logger, addr, port, sni, host, path, certPath, keyPath s
 
 	Banner("HTTP")
 
-	fmt.Printf("%s HTTP request %s %s (Host %s)...\n", STrying, AddrStyle.Render(req.Method), AddrStyle.Render(req.URL.Path), AddrStyle.Render(req.Host))
+	fmt.Printf("%s HTTP request [host %s] %s %s %s...\n", STrying, AddrStyle.Render(req.Host), AddrStyle.Render(req.Method), AddrStyle.Render(req.URL.RequestURI()), AddrStyle.Render(req.URL.EscapedFragment()))
 
 	fmt.Printf("%s", BrightStyle.Render(resp.Proto))
 	if resp.StatusCode < 400 {
