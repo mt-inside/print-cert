@@ -196,6 +196,7 @@ func CheckTls2(log logr.Logger, addr, port, sni, host, path, certPath, keyPath s
 	cs := resp.TLS
 	fmt.Printf("Handshake complete. %s; ALPN proto %s\n", BrightStyle.Render(versionName(cs.Version)), BrightStyle.Render(RenderOptionalString(cs.NegotiatedProtocol)))
 	fmt.Printf("\tTLS cypher suite %s\n", tls.CipherSuiteName(cs.CipherSuite))
+	// TODO this ^^ is the agreed-upon symmetic scheme? Print the key-exchange also used to get it - DH or ECDH. Already printing the signature scheme (RSA, ECDSA, etc) when we print certs
 
 	/* Cert chain */
 
