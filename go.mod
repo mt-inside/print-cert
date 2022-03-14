@@ -4,9 +4,8 @@ go 1.17
 
 require (
 	github.com/MarshallWace/go-spnego v0.1.0
-	github.com/charmbracelet/lipgloss v0.4.0
-	github.com/davecgh/go-spew v1.1.1
 	github.com/go-logr/logr v0.4.0
+	github.com/logrusorgru/aurora/v3 v3.0.0
 	github.com/mt-inside/go-usvc v0.0.4
 	github.com/sergi/go-diff v1.2.0
 	github.com/spf13/cobra v1.3.0
@@ -26,15 +25,10 @@ require (
 	github.com/jcmturner/goidentity/v6 v6.0.1 // indirect
 	github.com/jcmturner/gokrb5/v8 v8.4.2 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
-	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
-	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/mitchellh/mapstructure v1.4.3 // indirect
-	github.com/muesli/reflow v0.2.1-0.20210115123740-9e1d0d53df68 // indirect
-	github.com/muesli/termenv v0.9.0 // indirect
 	github.com/pelletier/go-toml v1.9.4 // indirect
-	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/spf13/afero v1.6.0 // indirect
 	github.com/spf13/cast v1.4.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect

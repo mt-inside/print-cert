@@ -8,66 +8,66 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"github.com/logrusorgru/aurora/v3"
 )
 
 const TimeFmt = "2006 Jan _2 15:04:05"
 
 var (
-	InfoStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	FailStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	OkStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	WarnStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	AddrStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
-	VerbStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
-	NounStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
-	BrightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
+	InfoStyle   = aurora.BlackFg | aurora.BrightFg
+	FailStyle   = aurora.RedFg
+	OkStyle     = aurora.GreenFg
+	WarnStyle   = aurora.YellowFg
+	AddrStyle   = aurora.BlueFg
+	VerbStyle   = aurora.MagentaFg
+	NounStyle   = aurora.CyanFg
+	BrightStyle = aurora.WhiteFg | aurora.BrightFg
 
-	SInfo    = InfoStyle.Copy().Bold(true).Render("Info:")
-	STrying  = BrightStyle.Copy().Bold(true).Render("Trying:")
-	SOk      = OkStyle.Copy().Bold(true).Render("Ok:")
-	SWarning = WarnStyle.Copy().Bold(true).Render("Warning:")
-	SError   = FailStyle.Copy().Bold(true).Render("Error:")
+	SInfo    = aurora.Colorize("Info:", InfoStyle)
+	STrying  = aurora.Colorize("Trying:", BrightStyle)
+	SOk      = aurora.Colorize("Ok:", OkStyle)
+	SWarning = aurora.Colorize("Warning:", WarnStyle)
+	SError   = aurora.Colorize("Error:", FailStyle)
 
-	SYes = OkStyle.Copy().Bold(true).Render("yes")
-	SNo  = FailStyle.Copy().Bold(true).Render("no")
+	SYes = aurora.Colorize("yes", OkStyle)
+	SNo  = aurora.Colorize("no", FailStyle)
 )
 
-func RenderYesNo(test bool) string {
+func RenderYesNo(test bool) aurora.Value {
 	if test {
 		return SYes
 	}
 	return SNo
 }
 
-func RenderOptionalString(s string, style lipgloss.Style) string {
+func RenderOptionalString(s string, style aurora.Color) aurora.Value {
 	if s == "" {
-		return InfoStyle.Render("<none>")
+		return aurora.Colorize("<none>", InfoStyle)
 	}
-	return style.Render(s)
+	return aurora.Colorize(s, style)
 }
 
-func RenderTime(t time.Time, start bool) string {
+func RenderTime(t time.Time, start bool) aurora.Value {
 	if start {
 		if t.After(time.Now()) {
-			return FailStyle.Render(t.Format(TimeFmt))
+			return aurora.Colorize(t.Format(TimeFmt), FailStyle)
 		} else {
-			return OkStyle.Render(t.Format(TimeFmt))
+			return aurora.Colorize(t.Format(TimeFmt), OkStyle)
 		}
 	} else {
 		if t.Before(time.Now()) {
-			return FailStyle.Render(t.Format(TimeFmt))
+			return aurora.Colorize(t.Format(TimeFmt), FailStyle)
 		} else if t.Before(time.Now().Add(240 * time.Hour)) {
-			return WarnStyle.Render(t.Format(TimeFmt))
+			return aurora.Colorize(t.Format(TimeFmt), WarnStyle)
 		} else {
-			return OkStyle.Render(t.Format(TimeFmt))
+			return aurora.Colorize(t.Format(TimeFmt), OkStyle)
 		}
 	}
 }
 
 func RenderList(ss []string) string {
 	if len(ss) == 0 {
-		return InfoStyle.Render("<none>")
+		return aurora.Colorize("<none>", InfoStyle).String()
 	}
 	return strings.Join(ss, ", ")
 }
@@ -75,27 +75,27 @@ func RenderList(ss []string) string {
 func RenderDNSList(names []string) string {
 	var ss []string
 	for _, name := range names {
-		ss = append(ss, AddrStyle.Render(name))
+		ss = append(ss, aurora.Colorize(name, AddrStyle).String())
 	}
 	return RenderList(ss)
 }
 func RenderIPList(ips []net.IP) string {
 	var ss []string
 	for _, ip := range ips {
-		ss = append(ss, AddrStyle.Render(ip.String()))
+		ss = append(ss, aurora.Colorize(ip.String(), AddrStyle).String())
 	}
 	return RenderList(ss)
 }
 
 func RenderCertBasics(cert *x509.Certificate) string {
-	caFlag := InfoStyle.Render("non-ca")
+	caFlag := aurora.Colorize("non-ca", InfoStyle)
 	if cert.IsCA {
-		caFlag = OkStyle.Render("ca")
+		caFlag = aurora.Colorize("ca", OkStyle)
 	}
 
 	return fmt.Sprintf("\t[%s -> %s] %s subj %s [%s]",
 		RenderTime(cert.NotBefore, true), RenderTime(cert.NotAfter, false),
-		NounStyle.Render(cert.PublicKeyAlgorithm.String()), AddrStyle.Render(cert.Subject.String()),
+		aurora.Colorize(cert.PublicKeyAlgorithm.String(), NounStyle), aurora.Colorize(cert.Subject.String(), AddrStyle),
 		// No need to print Issuer, cause that's the Subject of the next cert in the chain
 		caFlag,
 	)
@@ -127,6 +127,6 @@ func CheckErr(err error) {
 
 func Banner(s string) {
 	fmt.Println()
-	fmt.Println(BrightStyle.Render(fmt.Sprintf("== %s ==", s)))
+	fmt.Println(aurora.Colorize(fmt.Sprintf("== %s ==", s), BrightStyle))
 	fmt.Println()
 }
