@@ -34,7 +34,7 @@ func main() {
 
 func appMain(cmd *cobra.Command, args []string) {
 
-	log := usvc.GetLogger(false, 0)
+	log := usvc.GetLogger(false)
 
 	f5Host := args[0]
 	f5Port := args[1]
