@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
+	"syscall"
 	"time"
 
 	"github.com/MarshallWace/go-spnego"
@@ -47,8 +47,30 @@ func CheckRevDns(ip net.IP) string {
 	return revName
 }
 
-// TODO make this in the main()s and pass it through instead
-func getHttpClient(log logr.Logger, sni, certPath, keyPath string, krb bool) *http.Client {
+func GetPlaintextClient(log logr.Logger) *http.Client {
+	c := &http.Client{
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+				Control: func(network, address string, c syscall.RawConn) error {
+					log.V(1).Info("TCP: established connection with", "addr", address)
+
+					return nil
+				},
+			}).DialContext,
+			ResponseHeaderTimeout: 10 * time.Second,
+			DisableCompression:    true,
+		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			fmt.Printf("\t%s Redirected to %s\n", SInfo, AddrStyle.Render(req.URL.String()))
+			return nil
+		},
+	}
+
+	return c
+}
+func GetTLSClient(log logr.Logger, sni, certPath, keyPath string, krb, http11 bool) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
@@ -99,7 +121,7 @@ func getHttpClient(log logr.Logger, sni, certPath, keyPath string, krb bool) *ht
 					return nil // can inspect all connection and TLS info and reject
 				},
 			},
-			ForceAttemptHTTP2: true, // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
+			ForceAttemptHTTP2: !http11, // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			fmt.Printf("\t%s Redirected to %s\n", SInfo, AddrStyle.Render(req.URL.String()))
@@ -108,75 +130,31 @@ func getHttpClient(log logr.Logger, sni, certPath, keyPath string, krb bool) *ht
 	}
 
 	if krb {
-		c.Transport = &spnego.Transport{Transport: *c.Transport.(*http.Transport)}
+		c.Transport = &spnego.Transport{NoCanonicalize: true, Transport: *c.Transport.(*http.Transport)}
 	}
 
 	return c
 }
 
-// TODO does single-ip need this, or can it just use CheckTls2?
-func CheckTls(log logr.Logger, l4Addr, host, certPath, keyPath string, krb bool) {
-	client := getHttpClient(log, host, certPath, keyPath, krb)
+func GetHttpRequest(log logr.Logger, scheme, addr, port, host, path string) (*http.Request, context.CancelFunc) {
 
-	fmt.Printf("%s TLS handshake with %s (SNI ServerName %s)...\n", STrying, AddrStyle.Render(l4Addr), AddrStyle.Render(host))
-	// TODO use context
-	resp, err := client.Get("https://" + l4Addr) // TODO construct a URL object
-	CheckErr(err)
-	defer resp.Body.Close()
-
-	cs := resp.TLS
-	fmt.Printf("%s TLS handshake with %s. TLS version %s; ALPN proto %s\n", SOk, AddrStyle.Render(l4Addr), versionName(cs.Version), cs.NegotiatedProtocol)
-	fmt.Printf("\t%s TLS cypher suite %s\n", SInfo, tls.CipherSuiteName(cs.CipherSuite))
-
-	/* Cert chain */
-
-	servingCert := cs.PeerCertificates[0]
-	fmt.Printf("Serving Cert [%s -> %s] %s subj %s (iss %s %s) ca %t\n",
-		TimeStyle.Render(servingCert.NotBefore.Format(TimeFmt)), TimeStyle.Render(servingCert.NotAfter.Format(TimeFmt)),
-		servingCert.PublicKeyAlgorithm, AddrStyle.Render(servingCert.Subject.String()),
-		AddrStyle.Render(renderIssuer(servingCert)), servingCert.SignatureAlgorithm,
-		servingCert.IsCA,
-	)
-	fmt.Printf("\tSANs: DNS %s, IPs %s\n",
-		AddrStyle.Render(strings.Join(servingCert.DNSNames, ",")), AddrStyle.Render(strings.Join(ips2str(servingCert.IPAddresses), ",")),
-	)
-	if !nameInCert(host, servingCert.Subject, servingCert.DNSNames) { // TODO if it's an IP, check against IP SANs instead
-		fmt.Printf("\t%s given name %s not in SANs\n", SWarning, host)
-	}
-
-	fmt.Printf("Cert chain\n")
-	// TODO render first and subsequent certs differently (don't care about SANs on signers)
-	for _, cert := range cs.PeerCertificates[1:] {
-		fmt.Printf("\tCert [%s -> %s] %s subj %s (iss %s %s) ca %t\n",
-			TimeStyle.Render(cert.NotBefore.Format(TimeFmt)), TimeStyle.Render(cert.NotAfter.Format(TimeFmt)),
-			cert.PublicKeyAlgorithm, AddrStyle.Render(cert.Subject.String()),
-			AddrStyle.Render(renderIssuer(cert)), cert.SignatureAlgorithm,
-			cert.IsCA,
-		)
-	}
-}
-
-func CheckTls2(log logr.Logger, addr, port, sni, host, path, certPath, keyPath string, krb, printBody bool) {
-
-	client := getHttpClient(log, sni, certPath, keyPath, krb)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 	addrPort := net.JoinHostPort(addr, port)
 	hostPort := net.JoinHostPort(host, port)
-
-	fmt.Printf("%s TLS handshake with %s (SNI ServerName %s)...\n", STrying, AddrStyle.Render(addrPort), AddrStyle.Render(sni))
 
 	pathParts, err := url.Parse(path)
 	if err != nil {
 		panic(err)
 	}
 	l7Addr := url.URL{
-		Scheme:   "https",
+		Scheme:   scheme,
 		Host:     addrPort,
 		Path:     pathParts.EscapedPath(),
 		RawQuery: pathParts.RawQuery,
 		Fragment: pathParts.EscapedFragment(),
 	}
-	req, err := http.NewRequest("GET", l7Addr.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", l7Addr.String(), nil)
 	CheckErr(err)
 	// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
 	if port == "443" {
@@ -184,62 +162,73 @@ func CheckTls2(log logr.Logger, addr, port, sni, host, path, certPath, keyPath s
 	} else {
 		req.Host = hostPort
 	}
+
+	return req, cancel
+}
+
+func CheckTls(log logr.Logger, client *http.Client, req *http.Request) []byte {
+
+	host := req.Host
+
 	resp, err := client.Do(req)
 	CheckErr(err)
 	defer resp.Body.Close()
 
-	/* TLS */
-	// Morally it would be nice to have this in the appropriate callback, but HSTS header isn't available there, and it can't fail between there and here.
+	/* == TLS == */
 
-	fmt.Println()
+	if req.URL.Scheme == "https" {
+		fmt.Printf("%s TLS handshake with %s (SNI ServerName %s)...\n", STrying, AddrStyle.Render(req.URL.Host), AddrStyle.Render(client.Transport.(*http.Transport).TLSClientConfig.ServerName))
 
-	cs := resp.TLS
-	fmt.Printf("Handshake complete. %s; ALPN proto %s\n", BrightStyle.Render(versionName(cs.Version)), BrightStyle.Render(RenderOptionalString(cs.NegotiatedProtocol)))
-	fmt.Printf("\tTLS cypher suite %s\n", tls.CipherSuiteName(cs.CipherSuite))
-	// TODO this ^^ is the agreed-upon symmetic scheme? Print the key-exchange also used to get it - DH or ECDH. Already printing the signature scheme (RSA, ECDSA, etc) when we print certs
+		fmt.Println()
 
-	/* Cert chain */
+		cs := resp.TLS
+		fmt.Printf("Handshake complete. %s; ALPN proto %s\n", BrightStyle.Render(versionName(cs.Version)), BrightStyle.Render(RenderOptionalString(cs.NegotiatedProtocol)))
+		fmt.Printf("\tTLS cypher suite %s\n", tls.CipherSuiteName(cs.CipherSuite))
+		// TODO this ^^ is the agreed-upon symmetic scheme? Print the key-exchange also used to get it - DH or ECDH. Already printing the signature scheme (RSA, ECDSA, etc) when we print certs
 
-	fmt.Println()
-	servingCert := cs.PeerCertificates[0]
-	fmt.Println("Serving Cert")
-	fmt.Println(RenderCertBasics(servingCert))
-	fmt.Printf("\tDNS SANs %s\n", RenderList(servingCert.DNSNames))
-	fmt.Printf("\tIP SANs %s\n", RenderList(ips2str(servingCert.IPAddresses)))
+		/* Cert chain */
 
-	// TODO: take the subject too, parse it, check the CN value too
-	// TODO if it's an IP, check against IP SANs instead
-	fmt.Printf("\tGiven host %s in SANs? %s\n", host, YesNo(nameInCert(host, servingCert.Subject, servingCert.DNSNames)))
+		fmt.Println()
+		servingCert := cs.PeerCertificates[0]
+		fmt.Println("Serving Cert")
+		fmt.Println(RenderCertBasics(servingCert))
+		fmt.Printf("\tDNS SANs %s\n", RenderList(servingCert.DNSNames))
+		fmt.Printf("\tIP SANs %s\n", RenderList(ips2str(servingCert.IPAddresses)))
 
-	fmt.Printf("\tHSTS? %s\n", YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
+		// TODO: take the subject too, parse it, check the CN value too
+		// TODO if it's an IP, check against IP SANs instead
+		fmt.Printf("\tGiven host %s in SANs? %s\n", host, YesNo(nameInCert(host, servingCert.Subject, servingCert.DNSNames)))
 
-	fmt.Printf("\tOCSP info stapled to response? %s\n", YesNo(len(cs.OCSPResponse) > 0))
+		fmt.Printf("\tHSTS? %s\n", YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
 
-	fmt.Println()
+		fmt.Printf("\tOCSP info stapled to response? %s\n", YesNo(len(cs.OCSPResponse) > 0))
 
-	fmt.Printf("Presented cert chain\n")
-	// TODO render first and subsequent certs differently (don't care about SANs on signers)
-	for _, cert := range cs.PeerCertificates[1:] {
-		fmt.Println(RenderCertBasics(cert))
-	}
-	fmt.Printf("\t\tissuer: %s\n", AddrStyle.Render(renderIssuer(cs.PeerCertificates[len(cs.PeerCertificates)-1])))
+		fmt.Println()
 
-	if len(cs.VerifiedChains) > 0 {
-		// TODO: add cs.VerifidChains, which adds the certs from the local store that the presented certs (above) were verified against
-		panic("first time we've seen this, check it works")
-		if len(cs.VerifiedChains) > 1 {
-			panic("multiple chains")
-		}
-		for _, cert := range cs.VerifiedChains[0] {
+		fmt.Printf("Presented cert chain\n")
+		// TODO render first and subsequent certs differently (don't care about SANs on signers)
+		for _, cert := range cs.PeerCertificates[1:] {
 			fmt.Println(RenderCertBasics(cert))
 		}
+		fmt.Printf("\t\tissuer: %s\n", AddrStyle.Render(renderIssuer(cs.PeerCertificates[len(cs.PeerCertificates)-1])))
+
+		if len(cs.VerifiedChains) > 0 {
+			// TODO: add cs.VerifidChains, which adds the certs from the local store that the presented certs (above) were verified against
+			panic("first time we've seen this, check it works")
+			if len(cs.VerifiedChains) > 1 {
+				panic("multiple chains")
+			}
+			for _, cert := range cs.VerifiedChains[0] {
+				fmt.Println(RenderCertBasics(cert))
+			}
+		}
 	}
 
-	/* HTTP */
+	/* == HTTP == */
 
 	Banner("HTTP")
 
-	fmt.Printf("%s HTTP request [host %s] %s %s %s...\n", STrying, AddrStyle.Render(req.Host), AddrStyle.Render(req.Method), AddrStyle.Render(req.URL.RequestURI()), AddrStyle.Render(req.URL.EscapedFragment()))
+	fmt.Printf("%s HTTP request (Host %s) %s %s %s...\n", STrying, AddrStyle.Render(req.Host), AddrStyle.Render(req.Method), AddrStyle.Render(req.URL.RequestURI()), AddrStyle.Render(req.URL.EscapedFragment()))
 
 	fmt.Printf("%s", BrightStyle.Render(resp.Proto))
 	if resp.StatusCode < 400 {
@@ -263,47 +252,7 @@ func CheckTls2(log logr.Logger, addr, port, sni, host, path, certPath, keyPath s
 	CheckErr(err)
 	fmt.Printf("\tactual %s bytes of body read\n", BrightStyle.Render(strconv.FormatInt(int64(len(rawBody)), 10)))
 
-	if printBody {
-		fmt.Println(string(rawBody))
-	}
-}
-
-func httpGetSniHost(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string, krb bool) (*http.Response, []byte) {
-	client := getHttpClient(log, host, certPath, keyPath, krb)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", l7Addr.String(), nil)
-	CheckErr(err)
-	req.Host = host
-
-	resp, err := client.Do(req)
-	CheckErr(err)
-	defer resp.Body.Close()
-
-	// Have to read the body before we cancel the request context
-	rawBody, err := ioutil.ReadAll(resp.Body)
-	CheckErr(err)
-
-	return resp, rawBody
-}
-
-func CheckHttp(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string, krb bool) {
-	fmt.Printf("%s HTTP GET for %s with SNI %s, HTTP host: %s...\n", STrying, AddrStyle.Render(l7Addr.String()), AddrStyle.Render(host), AddrStyle.Render(host))
-
-	resp, _ := httpGetSniHost(log, l7Addr, host, certPath, keyPath, krb)
-
-	fmt.Printf("%s HTTP GET for %s => %s\n", SOk, AddrStyle.Render(l7Addr.String()), InfoStyle.Render(resp.Status))
-	fmt.Printf("\t%s %d bytes of %s from %s\n", SInfo, resp.ContentLength, resp.Header.Get("content-type"), resp.Header.Get("server"))
-}
-
-func GetBody(log logr.Logger, l7Addr *url.URL, host, certPath, keyPath string, krb bool) string {
-	_, rawBody := httpGetSniHost(log, l7Addr, host, certPath, keyPath, krb)
-
-	fmt.Printf("\t%s actual body length %d\n", SInfo, len(rawBody))
-
-	return string(rawBody)
+	return rawBody
 }
 
 func renderIssuer(cert *x509.Certificate) string {
