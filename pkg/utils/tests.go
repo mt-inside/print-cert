@@ -54,7 +54,7 @@ func GetPlaintextClient(log logr.Logger) *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 30 * time.Second,
 				Control: func(network, address string, c syscall.RawConn) error {
-					log.V(1).Info("TCP: established connection with", "addr", address)
+					log.V(1).Info("%sTCP: connection established", "addr", address)
 
 					return nil
 				},
@@ -76,6 +76,11 @@ func GetTLSClient(log logr.Logger, sni, certPath, keyPath string, krb, http11 bo
 			DialContext: (&net.Dialer{
 				Timeout:   10 * time.Second,
 				KeepAlive: 30 * time.Second,
+				Control: func(network, address string, c syscall.RawConn) error {
+					log.V(1).Info("TCP: connection established", "addr", address)
+
+					return nil
+				},
 			}).DialContext,
 			TLSHandshakeTimeout:   10 * time.Second, // assume this is just the TLS handshake ie tcp handshake is covered bby the dialer
 			ResponseHeaderTimeout: 10 * time.Second,
@@ -117,7 +122,47 @@ func GetTLSClient(log logr.Logger, sni, certPath, keyPath string, krb, http11 bo
 				},
 				VerifyConnection: func(cs tls.ConnectionState) error {
 					log.V(1).Info("TLS: all cert verification finished")
+					Banner("TLS")
 
+					fmt.Printf("%s Handshake complete\n", SOk)
+					fmt.Printf("\t%s; ALPN proto %s\n", BrightStyle.Render(versionName(cs.Version)), BrightStyle.Render(RenderOptionalString(cs.NegotiatedProtocol)))
+					fmt.Printf("\tCypher suite %s\n", tls.CipherSuiteName(cs.CipherSuite))
+					// TODO this ^^ is the agreed-upon symmetic scheme? Print the key-exchange also used to get it - DH or ECDH. Already printing the signature scheme (RSA, ECDSA, etc) when we print certs
+
+					/* Cert chain */
+
+					fmt.Println()
+					servingCert := cs.PeerCertificates[0]
+					fmt.Println("Serving Cert")
+					fmt.Println(RenderCertBasics(servingCert))
+					fmt.Printf("\tDNS SANs %s\n", RenderList(servingCert.DNSNames))
+					fmt.Printf("\tIP SANs %s\n", RenderList(ips2str(servingCert.IPAddresses)))
+
+					// TODO: take the subject too, parse it, check the CN value too
+					// TODO if it's an IP, check against IP SANs instead
+					fmt.Printf("\tGiven SNI %s in SANs? %s\n", sni, YesNo(nameInCert(sni, servingCert.Subject, servingCert.DNSNames)))
+
+					fmt.Printf("\tOCSP info stapled to response? %s\n", YesNo(len(cs.OCSPResponse) > 0))
+
+					fmt.Println()
+
+					fmt.Printf("Presented cert chain\n")
+					// TODO render first and subsequent certs differently (don't care about SANs on signers)
+					for _, cert := range cs.PeerCertificates[1:] {
+						fmt.Println(RenderCertBasics(cert))
+					}
+					fmt.Printf("\t\tissuer: %s\n", AddrStyle.Render(renderIssuer(cs.PeerCertificates[len(cs.PeerCertificates)-1])))
+
+					if len(cs.VerifiedChains) > 0 {
+						// TODO: add cs.VerifidChains, which adds the certs from the local store that the presented certs (above) were verified against
+						panic("first time we've seen this, check it works")
+						if len(cs.VerifiedChains) > 1 {
+							panic("multiple chains")
+						}
+						for _, cert := range cs.VerifiedChains[0] {
+							fmt.Println(RenderCertBasics(cert))
+						}
+					}
 					return nil // can inspect all connection and TLS info and reject
 				},
 			},
@@ -168,67 +213,19 @@ func GetHttpRequest(log logr.Logger, scheme, addr, port, host, path string) (*ht
 
 func CheckTls(log logr.Logger, client *http.Client, req *http.Request) []byte {
 
-	host := req.Host
+	fmt.Printf("%s Beginning request...\n", STrying)
+	if req.URL.Scheme == "https" {
+		fmt.Printf("\tTLS handshake: SNI ServerName %s\n", AddrStyle.Render(client.Transport.(*http.Transport).TLSClientConfig.ServerName))
+	}
+	fmt.Printf("\tHTTP request: Host %s | %s %s %s\n", AddrStyle.Render(req.Host), AddrStyle.Render(req.Method), AddrStyle.Render(req.URL.RequestURI()), AddrStyle.Render(req.URL.EscapedFragment())) // TODO render query
 
 	resp, err := client.Do(req)
 	CheckErr(err)
 	defer resp.Body.Close()
 
-	/* == TLS == */
-
-	if req.URL.Scheme == "https" {
-		fmt.Printf("%s TLS handshake with %s (SNI ServerName %s)...\n", STrying, AddrStyle.Render(req.URL.Host), AddrStyle.Render(client.Transport.(*http.Transport).TLSClientConfig.ServerName))
-
-		fmt.Println()
-
-		cs := resp.TLS
-		fmt.Printf("Handshake complete. %s; ALPN proto %s\n", BrightStyle.Render(versionName(cs.Version)), BrightStyle.Render(RenderOptionalString(cs.NegotiatedProtocol)))
-		fmt.Printf("\tTLS cypher suite %s\n", tls.CipherSuiteName(cs.CipherSuite))
-		// TODO this ^^ is the agreed-upon symmetic scheme? Print the key-exchange also used to get it - DH or ECDH. Already printing the signature scheme (RSA, ECDSA, etc) when we print certs
-
-		/* Cert chain */
-
-		fmt.Println()
-		servingCert := cs.PeerCertificates[0]
-		fmt.Println("Serving Cert")
-		fmt.Println(RenderCertBasics(servingCert))
-		fmt.Printf("\tDNS SANs %s\n", RenderList(servingCert.DNSNames))
-		fmt.Printf("\tIP SANs %s\n", RenderList(ips2str(servingCert.IPAddresses)))
-
-		// TODO: take the subject too, parse it, check the CN value too
-		// TODO if it's an IP, check against IP SANs instead
-		fmt.Printf("\tGiven host %s in SANs? %s\n", host, YesNo(nameInCert(host, servingCert.Subject, servingCert.DNSNames)))
-
-		fmt.Printf("\tHSTS? %s\n", YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
-
-		fmt.Printf("\tOCSP info stapled to response? %s\n", YesNo(len(cs.OCSPResponse) > 0))
-
-		fmt.Println()
-
-		fmt.Printf("Presented cert chain\n")
-		// TODO render first and subsequent certs differently (don't care about SANs on signers)
-		for _, cert := range cs.PeerCertificates[1:] {
-			fmt.Println(RenderCertBasics(cert))
-		}
-		fmt.Printf("\t\tissuer: %s\n", AddrStyle.Render(renderIssuer(cs.PeerCertificates[len(cs.PeerCertificates)-1])))
-
-		if len(cs.VerifiedChains) > 0 {
-			// TODO: add cs.VerifidChains, which adds the certs from the local store that the presented certs (above) were verified against
-			panic("first time we've seen this, check it works")
-			if len(cs.VerifiedChains) > 1 {
-				panic("multiple chains")
-			}
-			for _, cert := range cs.VerifiedChains[0] {
-				fmt.Println(RenderCertBasics(cert))
-			}
-		}
-	}
-
 	/* == HTTP == */
 
 	Banner("HTTP")
-
-	fmt.Printf("%s HTTP request (Host %s) %s %s %s...\n", STrying, AddrStyle.Render(req.Host), AddrStyle.Render(req.Method), AddrStyle.Render(req.URL.RequestURI()), AddrStyle.Render(req.URL.EscapedFragment()))
 
 	fmt.Printf("%s", BrightStyle.Render(resp.Proto))
 	if resp.StatusCode < 400 {
@@ -241,6 +238,7 @@ func CheckTls(log logr.Logger, client *http.Client, req *http.Request) []byte {
 	fmt.Printf(" from server %s", RenderOptionalString(resp.Header.Get("server")))
 	fmt.Println()
 
+	fmt.Printf("\tHSTS? %s\n", YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
 	// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
 
 	fmt.Printf("\tclaimed %s bytes of %s\n", BrightStyle.Render(strconv.FormatInt(int64(resp.ContentLength), 10)), BrightStyle.Render(resp.Header.Get("content-type")))
