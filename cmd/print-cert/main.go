@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/mt-inside/go-usvc"
+	"github.com/mt-inside/print-cert/pkg/utils"
 	. "github.com/mt-inside/print-cert/pkg/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -35,6 +36,7 @@ func main() {
 	cmd.Flags().StringP("key", "k", "", "Path to TLS key file")
 	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
 	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
+	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
 	viper.BindPFlag("sni", cmd.Flags().Lookup("sni"))
 	viper.BindPFlag("host", cmd.Flags().Lookup("host"))
 	viper.BindPFlag("path", cmd.Flags().Lookup("path"))
@@ -42,6 +44,7 @@ func main() {
 	viper.BindPFlag("key", cmd.Flags().Lookup("key"))
 	viper.BindPFlag("kerberos", cmd.Flags().Lookup("kerberos"))
 	viper.BindPFlag("printBody", cmd.Flags().Lookup("print-body"))
+	viper.BindPFlag("http11", cmd.Flags().Lookup("http11"))
 
 	CheckErr(cmd.Execute())
 }
@@ -68,17 +71,6 @@ func appMain(cmd *cobra.Command, args []string) {
 		CheckDns(name)
 	}
 
-	Banner("TLS")
-
-	// f5RevHost := checkRevDns(f5Ip)
-	// checkDnsConsistent(f5Host, f5RevHost)
-
-	// nsHost := checkRevDns(nsIp)
-	// nsRevIp := checkDns(nsHost)
-	// checkDnsConsistent(nsIp.String(), nsRevIp.String())
-
-	/* Check F5 */
-
 	host := viper.GetString("host")
 	if host == "" {
 		host = addr
@@ -87,9 +79,20 @@ func appMain(cmd *cobra.Command, args []string) {
 	if sni == "" {
 		sni = host
 	}
-	CheckTls2(log, addr, port, sni, host, viper.GetString("path"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("printBody"))
 
-	/* Fin */
+	client := utils.GetTLSClient(log, sni, viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
+	req, cancel := utils.GetHttpRequest(log, "https", addr, port, host, viper.GetString("path"))
+	defer cancel()
+
+	rawBody := CheckTls(
+		log,
+		client,
+		req,
+	)
+
+	if viper.GetBool("printBody") {
+		fmt.Println(string(rawBody))
+	}
 
 	fmt.Println()
 	fmt.Println()
