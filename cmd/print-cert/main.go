@@ -5,8 +5,8 @@ import (
 	"net"
 	"os"
 
-	. "bitbucket.mwam.local/infra/lb-checker/pkg/utils"
 	"github.com/mt-inside/go-usvc"
+	. "github.com/mt-inside/print-cert/pkg/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
