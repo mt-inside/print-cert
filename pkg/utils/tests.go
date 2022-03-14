@@ -124,10 +124,10 @@ func GetTLSClient(log logr.Logger, sni, certPath, keyPath string, krb, http11 bo
 					log.V(1).Info("TLS: all cert verification finished")
 					Banner("TLS")
 
-					fmt.Printf("%s Handshake complete\n", SOk)
-					fmt.Printf("\t%s; ALPN proto %s\n", BrightStyle.Render(versionName(cs.Version)), BrightStyle.Render(RenderOptionalString(cs.NegotiatedProtocol)))
-					fmt.Printf("\tCypher suite %s\n", tls.CipherSuiteName(cs.CipherSuite))
+					fmt.Printf("%s handshake complete\n", NounStyle.Render(versionName(cs.Version)))
+					fmt.Printf("\tCypher suite %s\n", NounStyle.Render(tls.CipherSuiteName(cs.CipherSuite)))
 					// TODO this ^^ is the agreed-upon symmetic scheme? Print the key-exchange also used to get it - DH or ECDH. Already printing the signature scheme (RSA, ECDSA, etc) when we print certs
+					fmt.Printf("\tALPN proto %s\n", RenderOptionalString(cs.NegotiatedProtocol, NounStyle))
 
 					/* Cert chain */
 
@@ -135,14 +135,14 @@ func GetTLSClient(log logr.Logger, sni, certPath, keyPath string, krb, http11 bo
 					servingCert := cs.PeerCertificates[0]
 					fmt.Println("Serving Cert")
 					fmt.Println(RenderCertBasics(servingCert))
-					fmt.Printf("\tDNS SANs %s\n", RenderList(servingCert.DNSNames))
-					fmt.Printf("\tIP SANs %s\n", RenderList(ips2str(servingCert.IPAddresses)))
+					fmt.Printf("\tDNS SANs %s\n", RenderDNSList(servingCert.DNSNames))
+					fmt.Printf("\tIP SANs %s\n", RenderIPList(servingCert.IPAddresses))
 
 					// TODO: take the subject too, parse it, check the CN value too
 					// TODO if it's an IP, check against IP SANs instead
-					fmt.Printf("\tGiven SNI %s in SANs? %s\n", sni, YesNo(nameInCert(sni, servingCert.Subject, servingCert.DNSNames)))
+					fmt.Printf("\tGiven SNI %s in SANs? %s\n", sni, RenderYesNo(nameInCert(sni, servingCert.Subject, servingCert.DNSNames)))
 
-					fmt.Printf("\tOCSP info stapled to response? %s\n", YesNo(len(cs.OCSPResponse) > 0))
+					fmt.Printf("\tOCSP info stapled to response? %s\n", RenderYesNo(len(cs.OCSPResponse) > 0))
 
 					fmt.Println()
 
@@ -217,7 +217,7 @@ func CheckTls(log logr.Logger, client *http.Client, req *http.Request) []byte {
 	if req.URL.Scheme == "https" {
 		fmt.Printf("\tTLS handshake: SNI ServerName %s\n", AddrStyle.Render(client.Transport.(*http.Transport).TLSClientConfig.ServerName))
 	}
-	fmt.Printf("\tHTTP request: Host %s | %s %s %s\n", AddrStyle.Render(req.Host), AddrStyle.Render(req.Method), AddrStyle.Render(req.URL.RequestURI()), AddrStyle.Render(req.URL.EscapedFragment())) // TODO render query
+	fmt.Printf("\tHTTP request: Host %s | %s %s %s\n", AddrStyle.Render(req.Host), VerbStyle.Render(req.Method), AddrStyle.Render(req.URL.RequestURI()), AddrStyle.Render(req.URL.EscapedFragment())) // TODO render query
 
 	resp, err := client.Do(req)
 	CheckErr(err)
@@ -227,7 +227,7 @@ func CheckTls(log logr.Logger, client *http.Client, req *http.Request) []byte {
 
 	Banner("HTTP")
 
-	fmt.Printf("%s", BrightStyle.Render(resp.Proto))
+	fmt.Printf("%s", NounStyle.Render(resp.Proto))
 	if resp.StatusCode < 400 {
 		fmt.Printf(" %s", OkStyle.Render(resp.Status))
 	} else if resp.StatusCode < 500 {
@@ -235,13 +235,13 @@ func CheckTls(log logr.Logger, client *http.Client, req *http.Request) []byte {
 	} else {
 		fmt.Printf(" %s", FailStyle.Render(resp.Status))
 	}
-	fmt.Printf(" from server %s", RenderOptionalString(resp.Header.Get("server")))
+	fmt.Printf(" from %s", RenderOptionalString(resp.Header.Get("server"), NounStyle))
 	fmt.Println()
 
-	fmt.Printf("\tHSTS? %s\n", YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
+	fmt.Printf("\tHSTS? %s\n", RenderYesNo(resp.Header.Get("Strict-Transport-Security") != ""))
 	// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
 
-	fmt.Printf("\tclaimed %s bytes of %s\n", BrightStyle.Render(strconv.FormatInt(int64(resp.ContentLength), 10)), BrightStyle.Render(resp.Header.Get("content-type")))
+	fmt.Printf("\tclaimed %s bytes of %s\n", BrightStyle.Render(strconv.FormatInt(int64(resp.ContentLength), 10)), NounStyle.Render(resp.Header.Get("content-type")))
 	if resp.Uncompressed {
 		fmt.Printf("\t%s Note: content was transparently decompressed; length information will not be accurate\n")
 	}
@@ -258,14 +258,6 @@ func renderIssuer(cert *x509.Certificate) string {
 		return "<self-signed>"
 	}
 	return cert.Issuer.String()
-}
-
-func ips2str(ips []net.IP) []string {
-	ipStrs := []string{}
-	for _, ip := range ips {
-		ipStrs = append(ipStrs, ip.String())
-	}
-	return ipStrs
 }
 
 //TODO: need to understand wildcards etc. Defer to the library to do this check
