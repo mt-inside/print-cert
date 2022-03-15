@@ -118,13 +118,7 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 					log.V(1).Info("TLS built-in cert verification finished (no-op in our config)")
 
 					if len(verifiedChains) > 0 {
-						panic("first time we've seen this, check it works. Shouldn't see it cause we set InsecureSkipVerify")
-						if len(verifiedChains) > 1 {
-							panic("multiple chains")
-						}
-						for _, cert := range verifiedChains[0] {
-							fmt.Println(RenderCertBasics(cert))
-						}
+						panic("Shouldn't see this cause we set InsecureSkipVerify")
 					}
 
 					return nil
@@ -268,7 +262,7 @@ func CheckTls(log logr.Logger, client *http.Client, req *http.Request) []byte {
 
 	fmt.Printf("\tclaimed %s bytes of %s\n", aurora.Colorize(strconv.FormatInt(int64(resp.ContentLength), 10), BrightStyle), aurora.Colorize(resp.Header.Get("content-type"), NounStyle))
 	if resp.Uncompressed {
-		fmt.Printf("\t%s Note: content was transparently decompressed; length information will not be accurate\n")
+		fmt.Printf("\t%s content was transparently decompressed; length information will not be accurate\n", SInfo)
 	}
 
 	rawBody, err := ioutil.ReadAll(resp.Body)
