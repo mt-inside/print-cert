@@ -32,14 +32,16 @@ func main() {
 	cmd.Flags().StringP("sni", "s", "", "SNI ServerName")
 	cmd.Flags().StringP("host", "a", "", "HTTP Host / :authority header")
 	cmd.Flags().StringP("path", "p", "/", "HTTP path to request")
-	cmd.Flags().StringP("cert", "c", "", "Path to TLS certificate file")
-	cmd.Flags().StringP("key", "k", "", "Path to TLS key file")
+	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA file")
+	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate file")
+	cmd.Flags().StringP("key", "k", "", "Path to TLS client key file")
 	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
 	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
 	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
 	viper.BindPFlag("sni", cmd.Flags().Lookup("sni"))
 	viper.BindPFlag("host", cmd.Flags().Lookup("host"))
 	viper.BindPFlag("path", cmd.Flags().Lookup("path"))
+	viper.BindPFlag("ca", cmd.Flags().Lookup("ca"))
 	viper.BindPFlag("cert", cmd.Flags().Lookup("cert"))
 	viper.BindPFlag("key", cmd.Flags().Lookup("key"))
 	viper.BindPFlag("kerberos", cmd.Flags().Lookup("kerberos"))
@@ -80,7 +82,7 @@ func appMain(cmd *cobra.Command, args []string) {
 		sni = host
 	}
 
-	client := utils.GetTLSClient(log, sni, viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
+	client := utils.GetTLSClient(log, sni, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
 	req, cancel := utils.GetHttpRequest(log, "https", addr, port, host, viper.GetString("path"))
 	defer cancel()
 
