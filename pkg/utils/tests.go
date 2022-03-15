@@ -19,6 +19,8 @@ import (
 	"github.com/logrusorgru/aurora/v3"
 )
 
+// TODO print local socket addr
+
 func CheckDns(name string) net.IP {
 	ips, err := net.LookupIP(name)
 	if ok := CheckWarn(err); !ok {
