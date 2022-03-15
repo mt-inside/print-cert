@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -93,27 +92,26 @@ func GetTLSClient(log logr.Logger, sni, certPath, keyPath string, krb, http11 bo
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 					log.Info("Asked for a client certificate")
 
+					/* Load from disk */
 					if certPath == "" || keyPath == "" {
 						panic(errors.New("Need to provide a path to key and cert"))
 					}
 					pair, err := tls.LoadX509KeyPair(certPath, keyPath)
+					CheckErr(err)
 
-					fmt.Println("Presenting client cert chain")
-					if err == nil {
-						var certs []*x509.Certificate
-						for _, bytes := range pair.Certificate {
-							cert, _ := x509.ParseCertificate(bytes)
-							certs = append(certs, cert)
-						}
-
-						fmt.Println(RenderCertBasics(certs[0]))
-						fmt.Printf("Cert chain\n")
-						for _, cert := range certs[1:] {
-							fmt.Println(RenderCertBasics(cert))
-						}
-						fmt.Printf("\t\tissuer: %s\n", aurora.Colorize(renderIssuer(certs[len(certs)-1]), AddrStyle))
+					/* Parse */
+					var certs []*x509.Certificate
+					for _, bytes := range pair.Certificate {
+						cert, err := x509.ParseCertificate(bytes)
+						CheckErr(err)
+						certs = append(certs, cert)
 					}
 
+					/* Print */
+					fmt.Println("Presenting client cert chain")
+					RenderClientCertChain(certs...)
+
+					/* Hand to http client */
 					return &pair, err
 				},
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
@@ -130,30 +128,14 @@ func GetTLSClient(log logr.Logger, sni, certPath, keyPath string, krb, http11 bo
 
 					// TODO this ^^ is the agreed-upon symmetic scheme? Print the key-exchange also used to get it - DH or ECDH. Already printing the signature scheme (RSA, ECDSA, etc) when we print certs
 					fmt.Printf("\tALPN proto %s\n", RenderOptionalString(cs.NegotiatedProtocol, NounStyle))
+					fmt.Printf("\tOCSP info stapled to response? %s\n", RenderYesNo(len(cs.OCSPResponse) > 0))
+					fmt.Println()
 
 					/* Cert chain */
 
+					fmt.Println("Received serving cert chain")
+					RenderServingCertChain(&sni, nil, cs.PeerCertificates...)
 					fmt.Println()
-					servingCert := cs.PeerCertificates[0]
-					fmt.Println("Serving Cert")
-					fmt.Println(RenderCertBasics(servingCert))
-					fmt.Printf("\tDNS SANs %s\n", RenderDNSList(servingCert.DNSNames))
-					fmt.Printf("\tIP SANs %s\n", RenderIPList(servingCert.IPAddresses))
-
-					// TODO: take the subject too, parse it, check the CN value too
-					// TODO if it's an IP, check against IP SANs instead
-					fmt.Printf("\tGiven SNI %s in SANs? %s\n", sni, RenderYesNo(nameInCert(sni, servingCert.Subject, servingCert.DNSNames)))
-
-					fmt.Printf("\tOCSP info stapled to response? %s\n", RenderYesNo(len(cs.OCSPResponse) > 0))
-
-					fmt.Println()
-
-					fmt.Printf("Presented cert chain\n")
-					// TODO render first and subsequent certs differently (don't care about SANs on signers)
-					for _, cert := range cs.PeerCertificates[1:] {
-						fmt.Println(RenderCertBasics(cert))
-					}
-					fmt.Printf("\t\tissuer: %s\n", aurora.Colorize(renderIssuer(cs.PeerCertificates[len(cs.PeerCertificates)-1]), AddrStyle))
 
 					if len(cs.VerifiedChains) > 0 {
 						// TODO: add cs.VerifidChains, which adds the certs from the local store that the presented certs (above) were verified against
@@ -253,40 +235,4 @@ func CheckTls(log logr.Logger, client *http.Client, req *http.Request) []byte {
 	fmt.Printf("\tactual %s bytes of body read\n", aurora.Colorize(strconv.FormatInt(int64(len(rawBody)), 10), BrightStyle))
 
 	return rawBody
-}
-
-func renderIssuer(cert *x509.Certificate) string {
-	if cert.Issuer.String() == cert.Subject.String() {
-		return "<self-signed>"
-	}
-	return cert.Issuer.String()
-}
-
-//TODO: need to understand wildcards etc. Defer to the library to do this check
-func nameInCert(name string, subj pkix.Name, sans []string) bool {
-	if name == subj.CommonName {
-		return true
-	}
-	for _, san := range sans {
-		if san == name {
-			return true
-		}
-	}
-	return false
-}
-
-// TODO will be in stdlib anytime now... https://go-review.googlesource.com/c/go/+/321733/, https://github.com/golang/go/issues/46308
-func versionName(tlsVersion uint16) string {
-	switch tlsVersion {
-	case tls.VersionTLS10:
-		return "TLSv1.0"
-	case tls.VersionTLS11:
-		return "TLSv1.1"
-	case tls.VersionTLS12:
-		return "TLSv1.2"
-	case tls.VersionTLS13:
-		return "TLSv1.3"
-	default:
-		panic(errors.New("Unknown TLS version"))
-	}
 }
