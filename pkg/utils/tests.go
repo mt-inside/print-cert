@@ -184,14 +184,23 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 			},
 			ForceAttemptHTTP2: !http11, // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
 		},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			fmt.Printf("\t%s Redirected to %s\n", SInfo, aurora.Colorize(req.URL.String(), AddrStyle))
-			return nil
-		},
 	}
 
 	if krb {
 		c.Transport = &spnego.Transport{NoCanonicalize: true, Transport: *c.Transport.(*http.Transport)}
+	}
+
+	// Really ugly that this can't be set in the literal (so that it can reference and reach into the client and mutate it)
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		fmt.Printf("%s Redirected to %s\n", SWarning, aurora.Colorize(req.URL.String(), AddrStyle))
+
+		fmt.Printf("\tUpdating SNI ServerName to %s\n", aurora.Colorize(req.URL.Host, AddrStyle))
+		c.Transport.(*http.Transport).TLSClientConfig.ServerName = req.URL.Host
+
+		fmt.Printf("\tUpdating HTTP Host header to %s\n", aurora.Colorize(req.URL.Host, AddrStyle))
+		req.Host = req.URL.Host
+
+		return nil
 	}
 
 	return c
