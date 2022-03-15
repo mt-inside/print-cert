@@ -70,7 +70,7 @@ func GetPlaintextClient(log logr.Logger) *http.Client {
 
 	return c
 }
-func GetTLSClient(log logr.Logger, sni, certPath, keyPath string, krb, http11 bool) *http.Client {
+func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, http11 bool) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
@@ -86,7 +86,7 @@ func GetTLSClient(log logr.Logger, sni, certPath, keyPath string, krb, http11 bo
 			ResponseHeaderTimeout: 10 * time.Second,
 			DisableCompression:    true,
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+				InsecureSkipVerify: true, // deliberate, qv
 				Renegotiation:      tls.RenegotiateOnceAsClient,
 				ServerName:         sni, // SNI for TLS vhosting
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
@@ -115,9 +115,19 @@ func GetTLSClient(log logr.Logger, sni, certPath, keyPath string, krb, http11 bo
 					return &pair, err
 				},
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-					log.V(1).Info("TLS built-in cert verification finished")
+					log.V(1).Info("TLS built-in cert verification finished (no-op in our config)")
 
-					return nil // can do extra cert verification and reject
+					if len(verifiedChains) > 0 {
+						panic("first time we've seen this, check it works. Shouldn't see it cause we set InsecureSkipVerify")
+						if len(verifiedChains) > 1 {
+							panic("multiple chains")
+						}
+						for _, cert := range verifiedChains[0] {
+							fmt.Println(RenderCertBasics(cert))
+						}
+					}
+
+					return nil
 				},
 				VerifyConnection: func(cs tls.ConnectionState) error {
 					log.V(1).Info("TLS: all cert verification finished")
@@ -131,23 +141,45 @@ func GetTLSClient(log logr.Logger, sni, certPath, keyPath string, krb, http11 bo
 					fmt.Printf("\tOCSP info stapled to response? %s\n", RenderYesNo(len(cs.OCSPResponse) > 0))
 					fmt.Println()
 
-					/* Cert chain */
+					/* Print cert chain */
 
 					fmt.Println("Received serving cert chain")
-					RenderServingCertChain(&sni, nil, cs.PeerCertificates...)
-					fmt.Println()
 
-					if len(cs.VerifiedChains) > 0 {
-						// TODO: add cs.VerifidChains, which adds the certs from the local store that the presented certs (above) were verified against
-						panic("first time we've seen this, check it works")
-						if len(cs.VerifiedChains) > 1 {
-							panic("multiple chains")
-						}
-						for _, cert := range cs.VerifiedChains[0] {
-							fmt.Println(RenderCertBasics(cert))
+					// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
+					// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
+					// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
+					opts := x509.VerifyOptions{
+						DNSName:       cs.ServerName,
+						Intermediates: x509.NewCertPool(),
+					}
+					if caPath != "" {
+						bytes, err := ioutil.ReadFile(caPath)
+						CheckErr(err)
+
+						roots := x509.NewCertPool()
+						ok := roots.AppendCertsFromPEM(bytes)
+						CheckOk(ok)
+						opts.Roots = roots
+					}
+					for _, cert := range cs.PeerCertificates[1:] {
+						opts.Intermediates.AddCert(cert)
+					}
+
+					chains, err := cs.PeerCertificates[0].Verify(opts)
+					if err != nil {
+						RenderServingCertChain(&cs.ServerName, nil, cs.PeerCertificates, nil)
+						fmt.Println()
+					} else {
+						for _, chain := range chains {
+							RenderServingCertChain(&cs.ServerName, nil, cs.PeerCertificates, chain)
+							fmt.Println()
 						}
 					}
-					return nil // can inspect all connection and TLS info and reject
+
+					fmt.Println("\tCert accepted?", RenderYesError(err))
+					fmt.Println()
+
+					return nil
 				},
 			},
 			ForceAttemptHTTP2: !http11, // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff

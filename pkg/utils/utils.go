@@ -82,7 +82,12 @@ func RenderList(ss []string) string {
 	if len(ss) == 0 {
 		return aurora.Colorize("<none>", InfoStyle).String()
 	}
-	return strings.Join(ss, ", ")
+	render := strings.Join(ss, ", ")
+	// TODO broken cause the color escapes are counted in the length, and they also spill over into the ...
+	if len(render) >= 80 {
+		return render[:76] + "..."
+	}
+	return render
 }
 
 func RenderDNSList(names []string) string {
@@ -145,7 +150,7 @@ func RenderClientCertChain(certs ...*x509.Certificate) {
 	fmt.Printf("\t%d: %s\n", len(certs), renderIssuer(certs[len(certs)-1]))
 }
 
-func RenderServingCertChain(name *string, ip *net.IP, certs ...*x509.Certificate) {
+func RenderServingCertChain(name *string, ip *net.IP, peerCerts []*x509.Certificate, verifiedCerts []*x509.Certificate) {
 	var addr string
 	if name != nil {
 		addr = *name
@@ -155,9 +160,9 @@ func RenderServingCertChain(name *string, ip *net.IP, certs ...*x509.Certificate
 		panic(errors.New("Need either a name or IP to check serving cert against"))
 	}
 
-	head := certs[0]
+	head := peerCerts[0]
 
-	fmt.Printf("\t0: %s\n", RenderCertBasics(head))
+	fmt.Printf("\t0 (presented): %s\n", RenderCertBasics(head))
 	fmt.Printf("\t\tDNS SANs %s\n", RenderDNSList(head.DNSNames))
 	fmt.Printf("\t\tIP SANs %s\n", RenderIPList(head.IPAddresses))
 	fmt.Printf(
@@ -167,9 +172,23 @@ func RenderServingCertChain(name *string, ip *net.IP, certs ...*x509.Certificate
 		RenderYesNo(strings.ToLower(head.Subject.CommonName) == strings.ToLower(*name)),
 	)
 
-	for i, cert := range certs[1:] {
-		fmt.Printf("\t%d: %s\n", i+1, RenderCertBasics(cert))
+	certs := verifiedCerts
+	if certs == nil {
+		certs = peerCerts
 	}
+
+	for i := 1; i < len(certs); i++ {
+		fmt.Printf("\t%d", i)
+
+		if i < len(peerCerts) && certs[i].Equal(peerCerts[i]) {
+			fmt.Printf(" (presented):")
+		} else {
+			fmt.Printf(" (installed):")
+		}
+
+		fmt.Printf(" %s\n", RenderCertBasics(certs[i]))
+	}
+
 	fmt.Printf("\t%d: %s\n", len(certs), renderIssuer(certs[len(certs)-1]))
 }
 
@@ -191,8 +210,16 @@ func CheckWarn(err error) bool {
 
 func CheckErr(err error) {
 	if err != nil {
+		//panic(err) - for backtraces
 		fmt.Printf("%s %v\n", SError, err)
-		panic(err)
+		os.Exit(1)
+	}
+}
+
+func CheckOk(ok bool) {
+	if !ok {
+		//panic(errors.New("Not OK!"))
+		fmt.Printf("%s Not OK!\n", SError)
 		os.Exit(1)
 	}
 }
