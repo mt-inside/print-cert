@@ -1,7 +1,13 @@
 package utils
 
 import (
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -38,6 +44,13 @@ func RenderYesNo(test bool) aurora.Value {
 		return SYes
 	}
 	return SNo
+}
+
+func RenderYesError(err error) aurora.Value {
+	if err == nil {
+		return SYes
+	}
+	return aurora.Colorize(err, FailStyle)
 }
 
 func RenderOptionalString(s string, style aurora.Color) aurora.Value {
@@ -87,18 +100,77 @@ func RenderIPList(ips []net.IP) string {
 	return RenderList(ss)
 }
 
+func renderIssuer(cert *x509.Certificate) aurora.Value {
+	if cert.Issuer.String() == cert.Subject.String() {
+		return aurora.Colorize("<self-signed>", InfoStyle)
+	}
+	return aurora.Colorize(cert.Issuer.String(), AddrStyle)
+}
+
+func renderPublicKeyInfo(pk crypto.PublicKey) string {
+	switch pubKey := pk.(type) {
+	case *rsa.PublicKey:
+		return fmt.Sprintf("RSA:%d", pubKey.Size()*8) // private and public are same; it's the length of the shared modulus
+	case *ecdsa.PublicKey:
+		return fmt.Sprintf("ECDSA:%s", pubKey.Params().Name) // private and public are same; it's a fundamental property of the curve, implied by the curve name
+	case ed25519.PublicKey:
+		return fmt.Sprintf("Ed25519(%d)", ed25519.PrivateKeySize*8) // Constant size
+	default:
+		panic(errors.New("bottom"))
+	}
+}
+
 func RenderCertBasics(cert *x509.Certificate) string {
 	caFlag := aurora.Colorize("non-ca", InfoStyle)
 	if cert.IsCA {
 		caFlag = aurora.Colorize("ca", OkStyle)
 	}
 
-	return fmt.Sprintf("\t[%s -> %s] %s subj %s [%s]",
-		RenderTime(cert.NotBefore, true), RenderTime(cert.NotAfter, false),
-		aurora.Colorize(cert.PublicKeyAlgorithm.String(), NounStyle), aurora.Colorize(cert.Subject.String(), AddrStyle),
+	return fmt.Sprintf(
+		"[%s -> %s] key %s sig %s subj %s [%s]",
+		RenderTime(cert.NotBefore, true),
+		RenderTime(cert.NotAfter, false),
+		aurora.Colorize(renderPublicKeyInfo(cert.PublicKey), NounStyle),
+		aurora.Colorize(cert.SignatureAlgorithm, NounStyle),
+		aurora.Colorize(cert.Subject.String(), AddrStyle),
 		// No need to print Issuer, cause that's the Subject of the next cert in the chain
 		caFlag,
 	)
+}
+
+func RenderClientCertChain(certs ...*x509.Certificate) {
+	for i, cert := range certs {
+		fmt.Printf("\t%d: %s\n", i, RenderCertBasics(cert))
+	}
+	fmt.Printf("\t%d: %s\n", len(certs), renderIssuer(certs[len(certs)-1]))
+}
+
+func RenderServingCertChain(name *string, ip *net.IP, certs ...*x509.Certificate) {
+	var addr string
+	if name != nil {
+		addr = *name
+	} else if ip != nil {
+		addr = "[" + ip.String() + "]"
+	} else {
+		panic(errors.New("Need either a name or IP to check serving cert against"))
+	}
+
+	head := certs[0]
+
+	fmt.Printf("\t0: %s\n", RenderCertBasics(head))
+	fmt.Printf("\t\tDNS SANs %s\n", RenderDNSList(head.DNSNames))
+	fmt.Printf("\t\tIP SANs %s\n", RenderIPList(head.IPAddresses))
+	fmt.Printf(
+		"\t\tSNI %s in SANs? %s (CN? %s)\n",
+		aurora.Colorize(*name, AddrStyle),
+		RenderYesError(head.VerifyHostname(addr)),
+		RenderYesNo(strings.ToLower(head.Subject.CommonName) == strings.ToLower(*name)),
+	)
+
+	for i, cert := range certs[1:] {
+		fmt.Printf("\t%d: %s\n", i+1, RenderCertBasics(cert))
+	}
+	fmt.Printf("\t%d: %s\n", len(certs), renderIssuer(certs[len(certs)-1]))
 }
 
 func CheckInfo(err error) bool {
@@ -129,4 +201,20 @@ func Banner(s string) {
 	fmt.Println()
 	fmt.Println(aurora.Colorize(fmt.Sprintf("== %s ==", s), BrightStyle))
 	fmt.Println()
+}
+
+// TODO will be in stdlib anytime now... https://go-review.googlesource.com/c/go/+/321733/, https://github.com/golang/go/issues/46308
+func versionName(tlsVersion uint16) string {
+	switch tlsVersion {
+	case tls.VersionTLS10:
+		return "TLSv1.0"
+	case tls.VersionTLS11:
+		return "TLSv1.1"
+	case tls.VersionTLS12:
+		return "TLSv1.2"
+	case tls.VersionTLS13:
+		return "TLSv1.3"
+	default:
+		panic(errors.New("Unknown TLS version"))
+	}
 }
