@@ -1,10 +1,17 @@
 default:
 	@just --list
 
-print-cert *ARGS:
+lint:
+	go fmt ./...
+	go vet ./...
+	golint ./...
+	golangci-lint run ./...
+	go test ./...
+
+print-cert *ARGS: #lint
 	go run ./cmd/print-cert {{ARGS}} localhost 8443
 
-compare *ARGS:
+compare *ARGS: #lint
 	go run ./cmd/single-ip {{ARGS}} localhost 8080 127.0.0.1 8081 https
 
 nginx-build:

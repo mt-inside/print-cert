@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/logrusorgru/aurora/v3"
 	"github.com/mt-inside/go-usvc"
 	dmp "github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/spf13/cobra"
@@ -22,9 +23,11 @@ func main() {
 		Run:  appMain,
 	}
 
-	cmd.Flags().StringP("cert", "c", "", "Path to TLS certificate file")
-	cmd.Flags().StringP("key", "k", "", "Path to TLS key file")
+	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate file")
+	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate file")
+	cmd.Flags().StringP("key", "k", "", "Path to TLS client key file")
 	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
+	viper.BindPFlag("ca", cmd.Flags().Lookup("ca"))
 	viper.BindPFlag("cert", cmd.Flags().Lookup("cert"))
 	viper.BindPFlag("key", cmd.Flags().Lookup("key"))
 	viper.BindPFlag("printBody", cmd.Flags().Lookup("print-body"))
@@ -49,7 +52,7 @@ func appMain(cmd *cobra.Command, args []string) {
 		CheckErr(fmt.Errorf("Unknown scheme: %s", scheme))
 	}
 
-	fmt.Printf("Testing NetScaler VIP %v against F5 service %v\n", AddrStyle.Render(nsIp.String()), AddrStyle.Render(f5Host))
+	fmt.Printf("Testing NetScaler VIP %v against F5 service %v\n", aurora.Colorize(nsIp.String(), AddrStyle), aurora.Colorize(f5Host, AddrStyle))
 
 	/* Check DNS */
 
@@ -77,7 +80,7 @@ func appMain(cmd *cobra.Command, args []string) {
 		defer cancel()
 		f5Body = utils.CheckTls(log, client, req)
 	case "https":
-		client := utils.GetTLSClient(log, f5Host, viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
+		client := utils.GetTLSClient(log, f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
 		req, cancel := utils.GetHttpRequest(log, scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
 		defer cancel()
 		f5Body = utils.CheckTls(log, client, req)
@@ -95,7 +98,7 @@ func appMain(cmd *cobra.Command, args []string) {
 		defer cancel()
 		nsBody = utils.CheckTls(log, client, req)
 	case "https":
-		client := utils.GetTLSClient(log, f5Host, viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
+		client := utils.GetTLSClient(log, f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
 		req, cancel := utils.GetHttpRequest(log, scheme, nsIp.String(), nsPort, f5Host, viper.GetString("path"))
 		defer cancel()
 		nsBody = utils.CheckTls(log, client, req)
@@ -130,7 +133,7 @@ func appMain(cmd *cobra.Command, args []string) {
 
 func checkDnsConsistent(orig string, rev string) {
 	if rev != orig {
-		fmt.Printf("\t%s dns inconsistency: %s != %s\n", SWarning, AddrStyle.Render(orig), AddrStyle.Render(rev))
+		fmt.Printf("\t%s dns inconsistency: %s != %s\n", SWarning, aurora.Colorize(orig, AddrStyle), aurora.Colorize(rev, AddrStyle))
 	}
 }
 
