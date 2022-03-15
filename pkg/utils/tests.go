@@ -77,7 +77,9 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 				Timeout:   10 * time.Second,
 				KeepAlive: 30 * time.Second,
 				Control: func(network, address string, c syscall.RawConn) error {
-					log.V(1).Info("TCP: connection established", "addr", address)
+
+					Banner("TCP")
+					fmt.Println("Stream established with", aurora.Colorize(address, AddrStyle))
 
 					return nil
 				},
@@ -90,7 +92,7 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 				Renegotiation:      tls.RenegotiateOnceAsClient,
 				ServerName:         sni, // SNI for TLS vhosting
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-					log.Info("Asked for a client certificate")
+					log.Info("Hook: Asked for a TLS client certificate")
 
 					/* Load from disk */
 					if certPath == "" || keyPath == "" {
@@ -115,7 +117,7 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 					return &pair, err
 				},
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-					log.V(1).Info("TLS built-in cert verification finished (no-op in our config)")
+					log.V(1).Info("Hook: TLS built-in cert verification finished (no-op in our config)")
 
 					if len(verifiedChains) > 0 {
 						panic("Shouldn't see this cause we set InsecureSkipVerify")
@@ -124,7 +126,7 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 					return nil
 				},
 				VerifyConnection: func(cs tls.ConnectionState) error {
-					log.V(1).Info("TLS: all cert verification finished")
+					log.V(1).Info("Hook: all TLS cert verification finished")
 					Banner("TLS")
 
 					fmt.Printf("%s handshake complete\n", aurora.Colorize(versionName(cs.Version), NounStyle))
@@ -232,7 +234,9 @@ func GetHttpRequest(log logr.Logger, scheme, addr, port, host, path string) (*ht
 
 func CheckTls(log logr.Logger, client *http.Client, req *http.Request) []byte {
 
-	fmt.Printf("%s Beginning request...\n", STrying)
+	Banner("Request")
+
+	fmt.Printf("Beginning request...\n")
 	if req.URL.Scheme == "https" {
 		fmt.Printf("\tTLS handshake: SNI ServerName %s\n", aurora.Colorize(client.Transport.(*http.Transport).TLSClientConfig.ServerName, AddrStyle))
 	}
