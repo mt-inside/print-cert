@@ -56,7 +56,9 @@ func GetPlaintextClient(log logr.Logger) *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 30 * time.Second,
 				Control: func(network, address string, c syscall.RawConn) error {
-					log.V(1).Info("%sTCP: connection established", "addr", address)
+
+					Banner("TCP")
+					fmt.Println("Stream established with", aurora.Colorize(address, AddrStyle))
 
 					return nil
 				},
