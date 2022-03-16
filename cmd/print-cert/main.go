@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 
 	"github.com/mt-inside/go-usvc"
@@ -24,8 +25,8 @@ import (
 func main() {
 
 	cmd := &cobra.Command{
-		Use:  "addr port",
-		Args: cobra.ExactArgs(2),
+		Use:  "addr port scheme",
+		Args: cobra.ExactArgs(3),
 		Run:  appMain,
 	}
 
@@ -57,6 +58,10 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	addr := args[0]
 	port := args[1]
+	scheme := args[2]
+	if !(scheme == "http" || scheme == "https") {
+		CheckErr(fmt.Errorf("Unknown scheme: %s", scheme))
+	}
 
 	var ip net.IP
 	var name string
@@ -82,8 +87,15 @@ func appMain(cmd *cobra.Command, args []string) {
 		sni = host
 	}
 
-	client := utils.GetTLSClient(log, sni, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
-	req, cancel := utils.GetHttpRequest(log, "https", addr, port, host, viper.GetString("path"))
+	var client *http.Client
+	switch scheme {
+	case "http":
+		client = utils.GetPlaintextClient(log)
+	case "https":
+		client = utils.GetTLSClient(log, sni, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
+	}
+
+	req, cancel := utils.GetHttpRequest(log, scheme, addr, port, host, viper.GetString("path"))
 	defer cancel()
 
 	rawBody := CheckTls(
