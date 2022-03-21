@@ -15,12 +15,7 @@ import (
 )
 
 /* TODO
-* - when checking SAN validity, also check subj (need to parse that CN)
-* - show key len
 * - show dnssec and dane status of name
-* - use -h for sni, unless -s is given
-* - use "-a http" to do an http get /, print server, content-type, body-len (for this, drop the manual NextProtos, give the tls config to an http transport, give that to http client, and use that to do the get. Somewhere (the response object?) you can get hold of the conn object
-* - see if the address parses as an IP. IP or name, print the reverse (and go again and again until you see one you've seen before, print them all)
  */
 
 func init() {
@@ -74,20 +69,19 @@ func appMain(cmd *cobra.Command, args []string) {
 	}
 
 	var ip net.IP
-	var name string
 
 	b.Banner("DNS")
 
 	ip = net.ParseIP(addr)
 	if ip == nil {
-		name = addr
-		ip = probes.CheckDns(s, b, name)
-		probes.CheckRevDns(s, b, ip)
+		ip = probes.CheckDns(s, b, addr)
+		revName := probes.CheckRevDns(s, b, ip)
+		probes.CheckDnsConsistent(s, b, addr, revName)
 	} else {
-		name = probes.CheckRevDns(s, b, ip)
-		probes.CheckDns(s, b, name)
+		name := probes.CheckRevDns(s, b, ip)
+		revIp := probes.CheckDns(s, b, name)
+		probes.CheckDnsConsistent(s, b, ip.String(), revIp.String())
 	}
-	// TODO: CheckDNSConsistent
 
 	host := viper.GetString("host")
 	if host == "" {
