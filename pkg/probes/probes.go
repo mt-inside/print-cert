@@ -1,4 +1,4 @@
-package utils
+package probes
 
 import (
 	"context"
@@ -15,50 +15,61 @@ import (
 	"time"
 
 	"github.com/MarshallWace/go-spnego"
-	"github.com/go-logr/logr"
-	"github.com/logrusorgru/aurora/v3"
+	"github.com/mt-inside/http-log/pkg/output"
 )
 
 // TODO print local socket addr
 
-func CheckDns(name string) net.IP {
+func CheckDns(s output.TtyStyler, b output.Bios, name string) net.IP {
+	// TODO use manual DNS code (means parsing resolv.conf, copy code from system resolver to own file to vendor it) to
+	// - show all CNAMEs
+	// - show all the search domains tried (verbose mode)
+	// - which one worked, thus FQDN
+	// - DNSSEC?
+	// - DANE (replacement), etc?
+	// TODO use the result of this routine as the socket connection address (ie what does in the URL's Host - always set http host even if not overridden)
 	ips, err := net.LookupIP(name)
-	if ok := CheckWarn(err); !ok {
+	if ok := b.CheckWarn(err); !ok {
 		return net.IPv4(0, 0, 0, 0)
 	}
 	if len(ips) > 1 {
-		CheckInfo(errors.New("Host resolves to >1 IP, using first"))
+		b.CheckInfo(errors.New("Host resolves to >1 IP"))
 	}
-	ip := ips[0]
-	fmt.Printf("Name %v is %s\n", aurora.Colorize(name, AddrStyle), aurora.Colorize(ip.String(), AddrStyle))
+	fmt.Printf("%s resolves to %s\n", s.Addr(name), s.List(output.IPs2Strings(ips), s.AddrStyle))
 
-	return ip
+	//TODO: work out what to do here? Return them all, the reverse them all? Might diverge?
+	return ips[0]
 }
 
-func CheckRevDns(ip net.IP) string {
+func CheckRevDns(s output.TtyStyler, b output.Bios, ip net.IP) string {
 	names, err := net.LookupAddr(ip.String())
-	if ok := CheckWarn(err); !ok {
+	if ok := b.CheckWarn(err); !ok {
 		return "<NXDOMAIN>"
 	}
 	if len(names) > 1 {
-		CheckInfo(errors.New("IP resolves to >1 host, using first"))
+		b.CheckInfo(errors.New("IP resolves to >1 host"))
 	}
-	revName := names[0]
-	fmt.Printf("%s reverses to %s\n", aurora.Colorize(ip.String(), AddrStyle), aurora.Colorize(revName, AddrStyle))
+	fmt.Printf("%s reverses to %s\n", s.Addr(ip.String()), s.List(names, s.AddrStyle))
 
-	return revName
+	return names[0]
 }
 
-func GetPlaintextClient(log logr.Logger) *http.Client {
+func CheckDnsConsistent(s output.TtyStyler, b output.Bios, orig string, rev string) {
+	if rev != orig {
+		fmt.Printf("\t%s dns inconsistency: %s != %s\n", s.Warn("Warning"), s.Addr(orig), s.Addr(rev))
+	}
+}
+
+func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
 				Timeout:   10 * time.Second,
 				KeepAlive: 30 * time.Second,
-				Control: func(network, address string, c syscall.RawConn) error {
+				Control: func(network, address string, rawConn syscall.RawConn) error {
 
-					Banner("TCP")
-					fmt.Println("Stream established with", aurora.Colorize(address, AddrStyle))
+					b.Banner("TCP")
+					fmt.Println("Stream established with", s.Addr(address))
 
 					return nil
 				},
@@ -67,23 +78,23 @@ func GetPlaintextClient(log logr.Logger) *http.Client {
 			DisableCompression:    true,
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			fmt.Printf("\t%s Redirected to %s\n", SInfo, aurora.Colorize(req.URL.String(), AddrStyle))
+			fmt.Printf("\tRedirected to %s\n", s.Addr(req.URL.String()))
 			return nil
 		},
 	}
 
 	return c
 }
-func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, http11 bool) *http.Client {
+func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyPath string, krb, http11 bool) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
 				Timeout:   10 * time.Second,
 				KeepAlive: 30 * time.Second,
-				Control: func(network, address string, c syscall.RawConn) error {
+				Control: func(network, address string, rawConn syscall.RawConn) error {
 
-					Banner("TCP")
-					fmt.Println("Stream established with", aurora.Colorize(address, AddrStyle))
+					b.Banner("TCP")
+					fmt.Println("Stream established with", s.Addr(address))
 
 					return nil
 				},
@@ -96,32 +107,32 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 				Renegotiation:      tls.RenegotiateOnceAsClient,
 				ServerName:         sni, // SNI for TLS vhosting
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-					log.Info("Hook: Asked for a TLS client certificate")
+					b.Trace("Asked for a TLS client certificate")
 
 					/* Load from disk */
 					if certPath == "" || keyPath == "" {
 						panic(errors.New("Need to provide a path to key and cert"))
 					}
 					pair, err := tls.LoadX509KeyPair(certPath, keyPath)
-					CheckErr(err)
+					b.CheckErr(err)
 
 					/* Parse */
 					var certs []*x509.Certificate
 					for _, bytes := range pair.Certificate {
 						cert, err := x509.ParseCertificate(bytes)
-						CheckErr(err)
+						b.CheckErr(err)
 						certs = append(certs, cert)
 					}
 
 					/* Print */
 					fmt.Println("Presenting client cert chain")
-					RenderClientCertChain(certs...)
+					s.ClientCertChain(certs)
 
 					/* Hand to http client */
 					return &pair, err
 				},
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-					log.V(1).Info("Hook: TLS built-in cert verification finished (no-op in our config)")
+					b.Trace("Hook: TLS built-in cert verification finished (no-op in our config)")
 
 					if len(verifiedChains) > 0 {
 						panic("Shouldn't see this cause we set InsecureSkipVerify")
@@ -130,15 +141,15 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 					return nil
 				},
 				VerifyConnection: func(cs tls.ConnectionState) error {
-					log.V(1).Info("Hook: all TLS cert verification finished")
-					Banner("TLS")
+					b.Trace("Hook: all TLS cert verification finished")
+					b.Banner("TLS")
 
-					fmt.Printf("%s handshake complete\n", aurora.Colorize(versionName(cs.Version), NounStyle))
-					fmt.Printf("\tCypher suite %s\n", aurora.Colorize(tls.CipherSuiteName(cs.CipherSuite), NounStyle))
+					fmt.Printf("%s handshake complete\n", s.Noun(output.TLSVersionName(cs.Version)))
+					fmt.Printf("\tCypher suite %s\n", s.Noun(tls.CipherSuiteName(cs.CipherSuite)))
 
 					// TODO this ^^ is the agreed-upon symmetic scheme? Print the key-exchange also used to get it - DH or ECDH. Already printing the signature scheme (RSA, ECDSA, etc) when we print certs
-					fmt.Printf("\tALPN proto %s\n", RenderOptionalString(cs.NegotiatedProtocol, NounStyle))
-					fmt.Printf("\tOCSP info stapled to response? %s\n", RenderYesNo(len(cs.OCSPResponse) > 0))
+					fmt.Printf("\tALPN proto %s\n", s.OptionalString(cs.NegotiatedProtocol, s.NounStyle))
+					fmt.Printf("\tOCSP info stapled to response? %s\n", s.YesNo(len(cs.OCSPResponse) > 0))
 					fmt.Println()
 
 					/* Print cert chain */
@@ -154,11 +165,11 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 					}
 					if caPath != "" {
 						bytes, err := ioutil.ReadFile(caPath)
-						CheckErr(err)
+						b.CheckErr(err)
 
 						roots := x509.NewCertPool()
 						ok := roots.AppendCertsFromPEM(bytes)
-						CheckOk(ok)
+						b.CheckOk(ok)
 						opts.Roots = roots
 					}
 					for _, cert := range cs.PeerCertificates[1:] {
@@ -167,16 +178,16 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 
 					chains, err := cs.PeerCertificates[0].Verify(opts)
 					if err != nil {
-						RenderServingCertChain(&cs.ServerName, nil, cs.PeerCertificates, nil)
+						s.ServingCertChain(&cs.ServerName, nil, cs.PeerCertificates, nil)
 						fmt.Println()
 					} else {
 						for _, chain := range chains {
-							RenderServingCertChain(&cs.ServerName, nil, cs.PeerCertificates, chain)
+							s.ServingCertChain(&cs.ServerName, nil, cs.PeerCertificates, chain)
 							fmt.Println()
 						}
 					}
 
-					fmt.Println("\tCert accepted?", RenderYesError(err))
+					fmt.Println("\tCert valid?", s.YesError(err))
 					fmt.Println()
 
 					return nil
@@ -192,12 +203,12 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 
 	// Really ugly that this can't be set in the literal (so that it can reference and reach into the client and mutate it)
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		fmt.Printf("%s Redirected to %s\n", SWarning, aurora.Colorize(req.URL.String(), AddrStyle))
+		fmt.Printf("Redirected to %s\n", s.Addr(req.URL.String()))
 
-		fmt.Printf("\tUpdating SNI ServerName to %s\n", aurora.Colorize(req.URL.Host, AddrStyle))
+		fmt.Printf("\tUpdating SNI ServerName to %s\n", s.Addr(req.URL.Host))
 		c.Transport.(*http.Transport).TLSClientConfig.ServerName = req.URL.Host
 
-		fmt.Printf("\tUpdating HTTP Host header to %s\n", aurora.Colorize(req.URL.Host, AddrStyle))
+		fmt.Printf("\tUpdating HTTP Host header to %s\n", s.Addr(req.URL.Host))
 		req.Host = req.URL.Host
 
 		return nil
@@ -206,7 +217,7 @@ func GetTLSClient(log logr.Logger, sni, caPath, certPath, keyPath string, krb, h
 	return c
 }
 
-func GetHttpRequest(log logr.Logger, scheme, addr, port, host, path string) (*http.Request, context.CancelFunc) {
+func GetHttpRequest(s output.TtyStyler, b output.Bios, scheme, addr, port, host, path string) (*http.Request, context.CancelFunc) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
@@ -225,7 +236,7 @@ func GetHttpRequest(log logr.Logger, scheme, addr, port, host, path string) (*ht
 		Fragment: pathParts.EscapedFragment(),
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", l7Addr.String(), nil)
-	CheckErr(err)
+	b.CheckErr(err)
 	// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
 	if port == "443" {
 		req.Host = host
@@ -236,46 +247,46 @@ func GetHttpRequest(log logr.Logger, scheme, addr, port, host, path string) (*ht
 	return req, cancel
 }
 
-func CheckTls(log logr.Logger, client *http.Client, req *http.Request) []byte {
+func CheckTls(s output.TtyStyler, b output.Bios, client *http.Client, req *http.Request) []byte {
 
-	Banner("Request")
+	b.Banner("Request")
 
 	fmt.Printf("Beginning request...\n")
 	if req.URL.Scheme == "https" {
-		fmt.Printf("\tTLS handshake: SNI ServerName %s\n", aurora.Colorize(client.Transport.(*http.Transport).TLSClientConfig.ServerName, AddrStyle))
+		fmt.Printf("\tTLS handshake: SNI ServerName %s\n", s.Addr(client.Transport.(*http.Transport).TLSClientConfig.ServerName))
 	}
-	fmt.Printf("\tHTTP request: Host %s | %s %s %s\n", aurora.Colorize(req.Host, AddrStyle), aurora.Colorize(req.Method, VerbStyle), aurora.Colorize(req.URL.RequestURI(), AddrStyle), aurora.Colorize(req.URL.EscapedFragment(), AddrStyle)) // TODO render query
+	fmt.Printf("\tHTTP request: Host %s | %s %s\n", s.Addr(req.Host), s.Verb(req.Method), s.UrlPath(req.URL))
 
 	resp, err := client.Do(req)
-	CheckErr(err)
+	b.CheckErr(err)
 	defer resp.Body.Close()
 
 	/* == HTTP == */
 
-	Banner("HTTP")
+	b.Banner("HTTP")
 
-	fmt.Printf("%s", aurora.Colorize(resp.Proto, NounStyle))
+	fmt.Printf("%s", s.Noun(resp.Proto))
 	if resp.StatusCode < 400 {
-		fmt.Printf(" %s", aurora.Colorize(resp.Status, OkStyle))
+		fmt.Printf(" %s", s.Ok(resp.Status))
 	} else if resp.StatusCode < 500 {
-		fmt.Printf(" %s", aurora.Colorize(resp.Status, WarnStyle))
+		fmt.Printf(" %s", s.Warn(resp.Status))
 	} else {
-		fmt.Printf(" %s", aurora.Colorize(resp.Status, FailStyle))
+		fmt.Printf(" %s", s.Fail(resp.Status))
 	}
-	fmt.Printf(" from %s", RenderOptionalString(resp.Header.Get("server"), NounStyle))
+	fmt.Printf(" from %s", s.OptionalString(resp.Header.Get("server"), s.NounStyle))
 	fmt.Println()
 
-	fmt.Printf("\tHSTS? %s\n", RenderYesNo(resp.Header.Get("Strict-Transport-Security") != ""))
+	fmt.Printf("\tHSTS? %s\n", s.YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
 	// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
 
-	fmt.Printf("\tclaimed %s bytes of %s\n", aurora.Colorize(strconv.FormatInt(int64(resp.ContentLength), 10), BrightStyle), aurora.Colorize(resp.Header.Get("content-type"), NounStyle))
+	fmt.Printf("\tclaimed %s bytes of %s\n", s.Bright(strconv.FormatInt(int64(resp.ContentLength), 10)), s.Noun(resp.Header.Get("content-type")))
 	if resp.Uncompressed {
-		fmt.Printf("\t%s content was transparently decompressed; length information will not be accurate\n", SInfo)
+		fmt.Printf("\tcontent was transparently decompressed; length information will not be accurate\n")
 	}
 
 	rawBody, err := ioutil.ReadAll(resp.Body)
-	CheckErr(err)
-	fmt.Printf("\tactual %s bytes of body read\n", aurora.Colorize(strconv.FormatInt(int64(len(rawBody)), 10), BrightStyle))
+	b.CheckErr(err)
+	fmt.Printf("\tactual %s bytes of body read\n", s.Bright(strconv.FormatInt(int64(len(rawBody)), 10)))
 
 	return rawBody
 }

@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/mt-inside/go-usvc"
-	"github.com/mt-inside/print-cert/pkg/utils"
-	. "github.com/mt-inside/print-cert/pkg/utils"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/logrusorgru/aurora/v3"
+	"github.com/mt-inside/http-log/pkg/output"
+	"github.com/mt-inside/print-cert/pkg/probes"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -21,6 +22,11 @@ import (
 * - use "-a http" to do an http get /, print server, content-type, body-len (for this, drop the manual NextProtos, give the tls config to an http transport, give that to http client, and use that to do the get. Somewhere (the response object?) you can get hold of the conn object
 * - see if the address parses as an IP. IP or name, print the reverse (and go again and again until you see one you've seen before, print them all)
  */
+
+func init() {
+	spew.Config.DisableMethods = true
+	spew.Config.DisablePointerMethods = true
+}
 
 func main() {
 
@@ -49,34 +55,39 @@ func main() {
 	viper.BindPFlag("printBody", cmd.Flags().Lookup("print-body"))
 	viper.BindPFlag("http11", cmd.Flags().Lookup("http11"))
 
-	CheckErr(cmd.Execute())
+	err := cmd.Execute()
+	if err != nil {
+		fmt.Println("Error during execution: %v", err)
+	}
 }
 
 func appMain(cmd *cobra.Command, args []string) {
 
-	log := usvc.GetLogger(false)
+	s := output.NewTtyStyler(aurora.NewAurora(true))
+	b := output.NewTtyBios(s)
 
 	addr := args[0]
 	port := args[1]
 	scheme := args[2]
 	if !(scheme == "http" || scheme == "https") {
-		CheckErr(fmt.Errorf("Unknown scheme: %s", scheme))
+		b.CheckErr(fmt.Errorf("Unknown scheme: %s", scheme))
 	}
 
 	var ip net.IP
 	var name string
 
-	Banner("DNS")
+	b.Banner("DNS")
 
 	ip = net.ParseIP(addr)
 	if ip == nil {
 		name = addr
-		ip = CheckDns(name)
-		CheckRevDns(ip)
+		ip = probes.CheckDns(s, b, name)
+		probes.CheckRevDns(s, b, ip)
 	} else {
-		name = CheckRevDns(ip)
-		CheckDns(name)
+		name = probes.CheckRevDns(s, b, ip)
+		probes.CheckDns(s, b, name)
 	}
+	// TODO: CheckDNSConsistent
 
 	host := viper.GetString("host")
 	if host == "" {
@@ -90,16 +101,16 @@ func appMain(cmd *cobra.Command, args []string) {
 	var client *http.Client
 	switch scheme {
 	case "http":
-		client = utils.GetPlaintextClient(log)
+		client = probes.GetPlaintextClient(s, b)
 	case "https":
-		client = utils.GetTLSClient(log, sni, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
+		client = probes.GetTLSClient(s, b, sni, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
 	}
 
-	req, cancel := utils.GetHttpRequest(log, scheme, addr, port, host, viper.GetString("path"))
+	req, cancel := probes.GetHttpRequest(s, b, scheme, addr, port, host, viper.GetString("path"))
 	defer cancel()
 
-	rawBody := CheckTls(
-		log,
+	rawBody := probes.CheckTls(
+		s, b,
 		client,
 		req,
 	)

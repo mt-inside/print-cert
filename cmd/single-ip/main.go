@@ -6,13 +6,11 @@ import (
 	"os"
 
 	"github.com/logrusorgru/aurora/v3"
-	"github.com/mt-inside/go-usvc"
+	"github.com/mt-inside/http-log/pkg/output"
+	"github.com/mt-inside/print-cert/pkg/probes"
 	dmp "github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-
-	"github.com/mt-inside/print-cert/pkg/utils"
-	. "github.com/mt-inside/print-cert/pkg/utils"
 )
 
 func main() {
@@ -32,12 +30,16 @@ func main() {
 	viper.BindPFlag("key", cmd.Flags().Lookup("key"))
 	viper.BindPFlag("printBody", cmd.Flags().Lookup("print-body"))
 
-	CheckErr(cmd.Execute())
+	err := cmd.Execute()
+	if err != nil {
+		fmt.Println("Error during execution: %v", err)
+	}
 }
 
 func appMain(cmd *cobra.Command, args []string) {
 
-	log := usvc.GetLogger(false)
+	s := output.NewTtyStyler(aurora.NewAurora(true))
+	b := output.NewTtyBios(s)
 
 	f5Host := args[0]
 	f5Port := args[1]
@@ -46,67 +48,67 @@ func appMain(cmd *cobra.Command, args []string) {
 	scheme := args[4]
 
 	if nsIp == nil {
-		CheckErr(fmt.Errorf("Invalid IP: %s", args[2]))
+		b.CheckErr(fmt.Errorf("Invalid IP: %s", args[2]))
 	}
 	if !(scheme == "http" || scheme == "https") {
-		CheckErr(fmt.Errorf("Unknown scheme: %s", scheme))
+		b.CheckErr(fmt.Errorf("Unknown scheme: %s", scheme))
 	}
 
-	fmt.Printf("Testing NetScaler VIP %v against F5 service %v\n", aurora.Colorize(nsIp.String(), AddrStyle), aurora.Colorize(f5Host, AddrStyle))
+	fmt.Printf("Testing NetScaler VIP %v against F5 service %v\n", s.Addr(nsIp.String()), s.Addr(f5Host))
 
 	/* Check DNS */
 
-	Banner("DNS")
+	b.Banner("DNS")
 
-	f5Ip := CheckDns(f5Host)
-	f5RevHost := CheckRevDns(f5Ip)
-	checkDnsConsistent(f5Host, f5RevHost)
+	f5Ip := probes.CheckDns(s, b, f5Host)
+	f5RevHost := probes.CheckRevDns(s, b, f5Ip)
+	probes.CheckDnsConsistent(s, b, f5Host, f5RevHost)
 
-	nsHost := CheckRevDns(nsIp)
-	nsRevIp := CheckDns(nsHost)
-	checkDnsConsistent(nsIp.String(), nsRevIp.String())
+	nsHost := probes.CheckRevDns(s, b, nsIp)
+	nsRevIp := probes.CheckDns(s, b, nsHost)
+	probes.CheckDnsConsistent(s, b, nsIp.String(), nsRevIp.String())
 
 	//do for f5 and ns. For ns, don't rely on the dns so use f5host
 
 	/* Check F5 */
 
-	Banner("Existing F5")
+	b.Banner("Existing F5")
 	var f5Body []byte
 
 	switch scheme {
 	case "http":
-		client := utils.GetPlaintextClient(log)
-		req, cancel := utils.GetHttpRequest(log, scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
+		client := probes.GetPlaintextClient(s, b)
+		req, cancel := probes.GetHttpRequest(s, b, scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
 		defer cancel()
-		f5Body = utils.CheckTls(log, client, req)
+		f5Body = probes.CheckTls(s, b, client, req)
 	case "https":
-		client := utils.GetTLSClient(log, f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
-		req, cancel := utils.GetHttpRequest(log, scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
+		client := probes.GetTLSClient(s, b, f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
+		req, cancel := probes.GetHttpRequest(s, b, scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
 		defer cancel()
-		f5Body = utils.CheckTls(log, client, req)
+		f5Body = probes.CheckTls(s, b, client, req)
 	}
 
 	/* Check NetScaler */
 
-	Banner("New NetScaler")
+	b.Banner("New NetScaler")
 	var nsBody []byte
 
 	switch scheme {
 	case "http":
-		client := utils.GetPlaintextClient(log)
-		req, cancel := utils.GetHttpRequest(log, scheme, nsIp.String(), nsPort, f5Host, viper.GetString("path"))
+		client := probes.GetPlaintextClient(s, b)
+		req, cancel := probes.GetHttpRequest(s, b, scheme, nsIp.String(), nsPort, f5Host, viper.GetString("path"))
 		defer cancel()
-		nsBody = utils.CheckTls(log, client, req)
+		nsBody = probes.CheckTls(s, b, client, req)
 	case "https":
-		client := utils.GetTLSClient(log, f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
-		req, cancel := utils.GetHttpRequest(log, scheme, nsIp.String(), nsPort, f5Host, viper.GetString("path"))
+		client := probes.GetTLSClient(s, b, f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
+		req, cancel := probes.GetHttpRequest(s, b, scheme, nsIp.String(), nsPort, f5Host, viper.GetString("path"))
 		defer cancel()
-		nsBody = utils.CheckTls(log, client, req)
+		nsBody = probes.CheckTls(s, b, client, req)
 	}
 
 	/* Body diff */
 
-	Banner("Differences")
+	b.Banner("Differences")
 
 	if viper.GetBool("printBody") {
 		fmt.Println("NETSCALER response body:")
@@ -117,10 +119,10 @@ func appMain(cmd *cobra.Command, args []string) {
 	diffs := differ.DiffMain(string(f5Body), string(nsBody), true) // TODO try-decode as utf8
 
 	if !(len(diffs) == 1 && diffs[0].Type == dmp.DiffEqual) {
-		fmt.Printf("%s response bodies differ\n", SError)
+		b.PrintErr("response bodies differ")
 		fmt.Println(differ.DiffPrettyText(diffs))
 	} else {
-		fmt.Printf("%s response bodies equal\n", SOk)
+		b.PrintInfo("response bodies equal")
 	}
 
 	/* Fin */
@@ -129,12 +131,6 @@ func appMain(cmd *cobra.Command, args []string) {
 	fmt.Println()
 
 	os.Exit(0)
-}
-
-func checkDnsConsistent(orig string, rev string) {
-	if rev != orig {
-		fmt.Printf("\t%s dns inconsistency: %s != %s\n", SWarning, aurora.Colorize(orig, AddrStyle), aurora.Colorize(rev, AddrStyle))
-	}
 }
 
 /*
