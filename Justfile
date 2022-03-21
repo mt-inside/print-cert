@@ -9,10 +9,10 @@ lint:
 	go test ./...
 
 print-cert *ARGS: #lint
-	go run ./cmd/print-cert {{ARGS}} localhost 8443
+	go run ./cmd/print-cert {{ARGS}} localhost 8080 https
 
 compare *ARGS: #lint
-	go run ./cmd/single-ip {{ARGS}} localhost 8443 127.0.0.1 8080 https
+	go run ./cmd/single-ip {{ARGS}} localhost 8080 127.0.0.1 8443 https
 
 nginx-build:
 	docker build -t nginx-mutual nginx
