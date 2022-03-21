@@ -18,7 +18,7 @@ import (
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
-// TODO print local socket addr
+// TODO print local socket addr - can't find it on the RawConn or the Dialer (localaddr remains nil even after connection)
 
 func CheckDns(s output.TtyStyler, b output.Bios, name string) net.IP {
 	// TODO use manual DNS code (means parsing resolv.conf, copy code from system resolver to own file to vendor it) to
