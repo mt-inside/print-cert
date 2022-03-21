@@ -315,8 +315,8 @@ github.com/modern-go/reflect2 v1.0.1/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3Rllmb
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/mt-inside/go-usvc v0.0.4 h1:vqV3goR8MQwsioVMstMPTtwZVV4P0n6zhXYfzapSpOQ=
 github.com/mt-inside/go-usvc v0.0.4/go.mod h1:vByX1w+t5I/jKeH6UnYkdc3u54gwItIPwstQK09ipn0=
-github.com/mt-inside/http-log v0.0.0-20220318164959-8a5e139b9605 h1:jVfxYlvIyBwQYCJRRWkKpEElXMxk6cxR3BLmEMLMErM=
-github.com/mt-inside/http-log v0.0.0-20220318164959-8a5e139b9605/go.mod h1:551QKkylDvnkUL33TGBa174hSmogFI+acXsQVbYgXH8=
+github.com/mt-inside/http-log v0.0.0-20220321140839-5b3941deb76c h1:+6j26hDFE4KXPMMqe0Pidl91EB/e49LeRZbedSlSB1g=
+github.com/mt-inside/http-log v0.0.0-20220321140839-5b3941deb76c/go.mod h1:551QKkylDvnkUL33TGBa174hSmogFI+acXsQVbYgXH8=
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pascaldekloe/goe v0.1.0/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
