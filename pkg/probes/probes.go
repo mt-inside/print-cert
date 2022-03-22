@@ -28,7 +28,7 @@ import (
 * - localhost is in Files
 * - google.com has ipv6 & v4
  */
-func CheckDNS2(s output.TtyStyler, b output.Bios, name string) net.IP {
+func CheckDNS2(s output.TtyStyler, b output.Bios, name string) []net.IP {
 
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	b.CheckErr(err)
@@ -80,7 +80,7 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) net.IP {
 		b.PrintErr("NXDOMAIN")
 	}
 
-	printCnameChain(s, in.Question[0].Name, answers)
+	as := printCnameChain(s, in.Question[0].Name, answers)
 
 	/* Validate DNSSEC. Options:
 	 * - implement DNSSEC validation manually (using the dns library and doing all the RRSIG, DNSKEY, DS queries right up to the root). This is a massive amount of work
@@ -103,10 +103,10 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) net.IP {
 		s.YesError(dnssecErr),
 	)
 
-	return nil // FIXME
+	return as
 }
 
-func printCnameChain(s output.TtyStyler, question string, answers []dns.RR) {
+func printCnameChain(s output.TtyStyler, question string, answers []dns.RR) []net.IP {
 
 	/* Algo notes
 	 * - CNAMEs can only point to one thing, thus there can only be one "chain" with no branching along the way
@@ -147,6 +147,60 @@ func printCnameChain(s output.TtyStyler, question string, answers []dns.RR) {
 	fmt.Printf(" %s", s.List(output.IPs2Strings(as), s.AddrStyle))
 
 	fmt.Printf(" (ttl remaining %s)\n", time.Duration(answers[0].Header().Ttl)*time.Second)
+
+	return as
+}
+
+func CheckRevDNS2(s output.TtyStyler, b output.Bios, ip net.IP) string {
+
+	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
+	b.CheckErr(err)
+
+	server := net.JoinHostPort(dnsConfig.Servers[0], dnsConfig.Port) // TODO: what do with multiple servers? Think we're meant to try them in order until one suceeds?
+
+	revIp, err := dns.ReverseAddr(ip.String())
+	b.CheckErr(err)
+
+	b.PrintInfo(fmt.Sprintf("Trying reversed IP: %s", s.Addr(revIp)))
+
+	c := dns.Client{
+		Dialer: &net.Dialer{Timeout: 5 * time.Second},
+	}
+
+	m := new(dns.Msg)
+	// By default this sets the flag to ask whatever server is configured to recurse for us. We could manually recurse, either continually against the system server (thus using its cache), or from the root servers down. However both are a huge amount of work for no gain
+	m.SetQuestion(revIp, dns.TypePTR)
+
+	in, _, err := c.Exchange(m, server)
+	b.CheckErr(err)
+
+	if len(in.Answer) == 0 {
+		b.PrintErr("NXDOMAIN")
+	}
+	if len(in.Answer) > 1 {
+		panic(errors.New("Never seen >1 PTR result"))
+	}
+
+	end := in.Answer[0].(*dns.PTR).Ptr
+
+	fmt.Printf("%s -> %s\n", s.Addr(ip.String()), s.Addr(end))
+
+	/* Validate DNSSEC */
+
+	resolver, err := goresolver.NewResolver("/etc/resolv.conf")
+	b.CheckErr(err)
+
+	_, dnssecErr := resolver.StrictNSQuery(in.Question[0].Name, dns.TypePTR)
+
+	// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
+	fmt.Printf(
+		"\tDNS Server: %s, authoritative? %s, dnssec? %s\n",
+		s.Addr(server),
+		s.YesInfo(in.Authoritative),
+		s.YesError(dnssecErr),
+	)
+
+	return end
 }
 
 func CheckDns(s output.TtyStyler, b output.Bios, name string) net.IP {

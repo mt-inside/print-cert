@@ -74,9 +74,9 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	ip = net.ParseIP(addr)
 	if ip == nil {
-		ip = probes.CheckDns(s, b, addr)
-		probes.CheckDNS2(s, b, addr)
-		revName := probes.CheckRevDns(s, b, ip)
+		ips := probes.CheckDNS2(s, b, addr)
+		ip = ips[0] // TODO
+		revName := probes.CheckRevDNS2(s, b, ip)
 		probes.CheckDnsConsistent(s, b, addr, revName)
 	} else {
 		name := probes.CheckRevDns(s, b, ip)
