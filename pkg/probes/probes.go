@@ -175,7 +175,8 @@ func CheckRevDNS2(s output.TtyStyler, b output.Bios, ip net.IP) string {
 	b.CheckErr(err)
 
 	if len(in.Answer) == 0 {
-		b.PrintErr("NXDOMAIN")
+		b.PrintWarn("NXDOMAIN")
+		return "NXDOMAIN"
 	}
 	if len(in.Answer) > 1 {
 		panic(errors.New("Never seen >1 PTR result"))
@@ -203,40 +204,6 @@ func CheckRevDNS2(s output.TtyStyler, b output.Bios, ip net.IP) string {
 	return end
 }
 
-func CheckDns(s output.TtyStyler, b output.Bios, name string) net.IP {
-	// TODO use manual DNS code (means parsing resolv.conf, copy code from system resolver to own file to vendor it) to
-	// - show all CNAMEs
-	// - show all the search domains tried (verbose mode)
-	// - which one worked, thus FQDN
-	// - DNSSEC?
-	// - DANE (replacement), etc?
-	// TODO use the result of this routine as the socket connection address (ie what does in the URL's Host - always set http host even if not overridden)
-	ips, err := net.LookupIP(name)
-	if ok := b.CheckWarn(err); !ok {
-		return net.IPv4(0, 0, 0, 0)
-	}
-	if len(ips) > 1 {
-		b.CheckInfo(errors.New("Host resolves to >1 IP"))
-	}
-	fmt.Printf("%s resolves to %s\n", s.Addr(name), s.List(output.IPs2Strings(ips), s.AddrStyle))
-
-	//TODO: work out what to do here? Return them all, the reverse them all? Might diverge?
-	return ips[0]
-}
-
-func CheckRevDns(s output.TtyStyler, b output.Bios, ip net.IP) string {
-	names, err := net.LookupAddr(ip.String())
-	if ok := b.CheckWarn(err); !ok {
-		return "<NXDOMAIN>"
-	}
-	if len(names) > 1 {
-		b.CheckInfo(errors.New("IP resolves to >1 host"))
-	}
-	fmt.Printf("%s reverses to %s\n", s.Addr(ip.String()), s.List(names, s.AddrStyle))
-
-	return names[0]
-}
-
 func CheckDnsConsistent(s output.TtyStyler, b output.Bios, orig string, rev string) {
 	if rev != orig {
 		fmt.Printf("\t%s dns inconsistency: %s != %s\n", s.Warn("Warning"), s.Addr(orig), s.Addr(rev))
@@ -252,7 +219,8 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 				Control: func(network, address string, rawConn syscall.RawConn) error {
 
 					b.Banner("TCP")
-					fmt.Println("Stream established with", s.Addr(address))
+					// Note: happens when it attempts to connect, not when it has
+					fmt.Println("Dialing ", s.Addr(address))
 
 					return nil
 				},
@@ -287,7 +255,8 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyP
 				Control: func(network, address string, rawConn syscall.RawConn) error {
 
 					b.Banner("TCP")
-					fmt.Println("Stream established with", s.Addr(address))
+					// Note: happens when it attempts to connect, not when it has
+					fmt.Println("Dialing ", s.Addr(address))
 
 					return nil
 				},
