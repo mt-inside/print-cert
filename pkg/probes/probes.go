@@ -28,7 +28,7 @@ import (
 * - localhost is in Files
 * - google.com has ipv6 & v4
  */
-func CheckDNS2(s output.TtyStyler, b output.Bios, name string) []net.IP {
+func CheckDNS2(s output.TtyStyler, b output.Bios, name string) ([]net.IP, string) {
 
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	b.CheckErr(err)
@@ -43,6 +43,7 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) []net.IP {
 
 	var in *dns.Msg // Just takes the value of the last one in the loop, ie the v6 AAAA answer, but servers are authoritative for /zones/ so if it's auth for v6 is it for v4 too (cause we're talking forward zones)
 	var answers []dns.RR
+	var fqdn string
 	for _, name := range names {
 		b.PrintInfo(fmt.Sprintf("Trying FQDN on search path: %s", s.Addr(name)))
 
@@ -72,6 +73,7 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) []net.IP {
 		answers = append(answers, in.Answer...)
 
 		if len(answers) > 0 {
+			fqdn = name
 			break
 		}
 	}
@@ -79,8 +81,6 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) []net.IP {
 	if len(answers) == 0 {
 		b.PrintErr("NXDOMAIN")
 	}
-
-	as := printCnameChain(s, in.Question[0].Name, answers)
 
 	/* Validate DNSSEC. Options:
 	 * - implement DNSSEC validation manually (using the dns library and doing all the RRSIG, DNSKEY, DS queries right up to the root). This is a massive amount of work
@@ -93,20 +93,23 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) []net.IP {
 	resolver, err := goresolver.NewResolver("/etc/resolv.conf")
 	b.CheckErr(err)
 
-	_, dnssecErr := resolver.StrictNSQuery(in.Question[0].Name, dns.TypeA)
+	_, dnssecErr := resolver.StrictNSQuery(fqdn, dns.TypeA)
+
+	/* Print */
+
+	as := printCnameChain(s, b, fqdn, answers, dnssecErr)
 
 	// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
 	fmt.Printf(
-		"\tDNS Server: %s, authoritative? %s, dnssec? %s\n",
+		"\tDNS Server: %s, authoritative? %s\n",
 		s.Addr(server),
 		s.YesInfo(in.Authoritative),
-		s.YesError(dnssecErr),
 	)
 
-	return as
+	return as, fqdn
 }
 
-func printCnameChain(s output.TtyStyler, question string, answers []dns.RR) []net.IP {
+func printCnameChain(s output.TtyStyler, b output.Bios, question string, answers []dns.RR, dnssecErr error) []net.IP {
 
 	/* Algo notes
 	 * - CNAMEs can only point to one thing, thus there can only be one "chain" with no branching along the way
@@ -146,12 +149,15 @@ func printCnameChain(s output.TtyStyler, question string, answers []dns.RR) []ne
 
 	fmt.Printf(" %s", s.List(output.IPs2Strings(as), s.AddrStyle))
 
-	fmt.Printf(" (ttl remaining %s)\n", time.Duration(answers[0].Header().Ttl)*time.Second)
+	fmt.Printf(" (dnssec? %s, ttl remaining %s)\n",
+		s.YesError(dnssecErr),
+		time.Duration(answers[0].Header().Ttl)*time.Second,
+	)
 
 	return as
 }
 
-func CheckRevDNS2(s output.TtyStyler, b output.Bios, ip net.IP) string {
+func CheckRevDNS2(s output.TtyStyler, b output.Bios, ip net.IP) []string {
 
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	b.CheckErr(err)
@@ -176,15 +182,22 @@ func CheckRevDNS2(s output.TtyStyler, b output.Bios, ip net.IP) string {
 
 	if len(in.Answer) == 0 {
 		b.PrintWarn("NXDOMAIN")
-		return "NXDOMAIN"
-	}
-	if len(in.Answer) > 1 {
-		panic(errors.New("Never seen >1 PTR result"))
+		return []string{}
 	}
 
-	end := in.Answer[0].(*dns.PTR).Ptr
-
-	fmt.Printf("%s -> %s\n", s.Addr(ip.String()), s.Addr(end))
+	var ends []string
+	for _, ans := range in.Answer {
+		if ptr, ok := ans.(*dns.PTR); ok {
+			if ptr.Hdr.Name != revIp {
+				// Because chains are (I think) permitted, we theoretically have a tree structure. Make sure it's flat for now
+				panic(errors.New("PTR chain"))
+			}
+			ends = append(ends, ptr.Ptr)
+		} else {
+			// Don't think anything stops CNAMEs in this mix
+			panic(errors.New("non-PTR record returned"))
+		}
+	}
 
 	/* Validate DNSSEC */
 
@@ -193,20 +206,29 @@ func CheckRevDNS2(s output.TtyStyler, b output.Bios, ip net.IP) string {
 
 	_, dnssecErr := resolver.StrictNSQuery(in.Question[0].Name, dns.TypePTR)
 
-	// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
+	/* Print */
+
 	fmt.Printf(
-		"\tDNS Server: %s, authoritative? %s, dnssec? %s\n",
-		s.Addr(server),
-		s.YesInfo(in.Authoritative),
+		"%s -> %s (dnssec? %s, ttl remaining %s)\n",
+		s.Addr(ip.String()),
+		s.List(ends, s.AddrStyle),
 		s.YesError(dnssecErr),
+		time.Duration(in.Answer[0].Header().Ttl)*time.Second,
 	)
 
-	return end
+	// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
+	fmt.Printf(
+		"\tDNS Server: %s, authoritative? %s\n",
+		s.Addr(server),
+		s.YesInfo(in.Authoritative),
+	)
+
+	return ends
 }
 
 func CheckDnsConsistent(s output.TtyStyler, b output.Bios, orig string, rev string) {
 	if rev != orig {
-		fmt.Printf("\t%s dns inconsistency: %s != %s\n", s.Warn("Warning"), s.Addr(orig), s.Addr(rev))
+		b.PrintWarn(fmt.Sprintf("dns inconsistency: %s != %s\n", s.Addr(orig), s.Addr(rev)))
 	}
 }
 
