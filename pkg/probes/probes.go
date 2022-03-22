@@ -35,8 +35,6 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) net.IP {
 
 	server := net.JoinHostPort(dnsConfig.Servers[0], dnsConfig.Port) // TODO: what do with multiple servers? Think we're meant to try them in order until one suceeds?
 
-	b.PrintInfo(fmt.Sprintf("DNS Server: %s", s.Addr(server)))
-
 	names := dnsConfig.NameList(name)
 
 	c := dns.Client{
@@ -83,15 +81,7 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) net.IP {
 	}
 
 	printCnameChain(s, in.Question[0].Name, answers)
-	// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
-	fmt.Printf("\tauthoritative? %s\n", s.YesInfo(in.Authoritative))
 
-	checkDnssec(s, b, in.Question[0].Name)
-
-	return nil // FIXME
-}
-
-func checkDnssec(s output.TtyStyler, b output.Bios, name string) {
 	/* Validate DNSSEC. Options:
 	 * - implement DNSSEC validation manually (using the dns library and doing all the RRSIG, DNSKEY, DS queries right up to the root). This is a massive amount of work
 	 * - use this goresolver library to do that for us (but don't use it for the main queries cause we want more control and visbility)
@@ -103,9 +93,17 @@ func checkDnssec(s output.TtyStyler, b output.Bios, name string) {
 	resolver, err := goresolver.NewResolver("/etc/resolv.conf")
 	b.CheckErr(err)
 
-	_, err = resolver.StrictNSQuery(name, dns.TypeA)
+	_, dnssecErr := resolver.StrictNSQuery(in.Question[0].Name, dns.TypeA)
 
-	fmt.Printf("DNSSEC? %s\n", s.YesError(err))
+	// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
+	fmt.Printf(
+		"\tDNS Server: %s, authoritative? %s, dnssec? %s\n",
+		s.Addr(server),
+		s.YesInfo(in.Authoritative),
+		s.YesError(dnssecErr),
+	)
+
+	return nil // FIXME
 }
 
 func printCnameChain(s output.TtyStyler, question string, answers []dns.RR) {
