@@ -25,6 +25,8 @@ import (
 /* Testing:
 * - www.wikipedia.org has CNAME
 * - cloudflare.net is DNSSEC
+* - localhost is in Files
+* - google.com has ipv6 & v4
  */
 func CheckDNS2(s output.TtyStyler, b output.Bios, name string) net.IP {
 
@@ -41,30 +43,48 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) net.IP {
 		Dialer: &net.Dialer{Timeout: 5 * time.Second},
 	}
 
-	var in *dns.Msg
+	var in *dns.Msg // Just takes the value of the last one in the loop, ie the v6 AAAA answer, but servers are authoritative for /zones/ so if it's auth for v6 is it for v4 too (cause we're talking forward zones)
+	var answers []dns.RR
 	for _, name := range names {
 		b.PrintInfo(fmt.Sprintf("Trying FQDN on search path: %s", s.Addr(name)))
+
+		var err error
+
+		/* v4 */
 
 		m := new(dns.Msg)
 		// By default this sets the flag to ask whatever server is configured to recurse for us. We could manually recurse, either continually against the system server (thus using its cache), or from the root servers down. However both are a huge amount of work for no gain
 		m.SetQuestion(name, dns.TypeA)
 
-		var err error
 		in, _, err = c.Exchange(m, server)
 		b.CheckErr(err)
 
+		answers = append(answers, in.Answer...)
+
 		// TODO: answers coming back non-authoritative - this is because we're asking a local recursive resolver, not hitting the actual orgs' servers?
 
-		if len(in.Answer) > 0 {
+		/* v6 */
+
+		m = new(dns.Msg)
+		m.SetQuestion(name, dns.TypeAAAA)
+
+		in, _, err = c.Exchange(m, server)
+		b.CheckErr(err)
+
+		answers = append(answers, in.Answer...)
+
+		if len(answers) > 0 {
 			break
 		}
 	}
 
-	if len(in.Answer) == 0 {
+	if len(answers) == 0 {
 		b.PrintErr("NXDOMAIN")
 	}
 
-	printCnameChain(s, in.Question[0].Name, in)
+	printCnameChain(s, in.Question[0].Name, answers)
+	// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
+	fmt.Printf("\tauthoritative? %s\n", s.YesInfo(in.Authoritative))
 
 	checkDnssec(s, b, in.Question[0].Name)
 
@@ -88,7 +108,7 @@ func checkDnssec(s output.TtyStyler, b output.Bios, name string) {
 	fmt.Printf("DNSSEC? %s\n", s.YesError(err))
 }
 
-func printCnameChain(s output.TtyStyler, question string, resp *dns.Msg) {
+func printCnameChain(s output.TtyStyler, question string, answers []dns.RR) {
 
 	/* Algo notes
 	 * - CNAMEs can only point to one thing, thus there can only be one "chain" with no branching along the way
@@ -102,12 +122,14 @@ func printCnameChain(s output.TtyStyler, question string, resp *dns.Msg) {
 
 	cnames := map[string]string{}
 	var as []net.IP
-	for _, ans := range resp.Answer {
+	for _, ans := range answers {
 		switch t := ans.(type) {
 		case *dns.CNAME:
 			cnames[t.Hdr.Name] = t.Target
 		case *dns.A:
 			as = append(as, t.A)
+		case *dns.AAAA:
+			as = append(as, t.AAAA)
 		}
 	}
 
@@ -126,11 +148,7 @@ func printCnameChain(s output.TtyStyler, question string, resp *dns.Msg) {
 
 	fmt.Printf(" %s", s.List(output.IPs2Strings(as), s.AddrStyle))
 
-	// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
-	fmt.Printf(" (ttl remaining %s, authoritative? %s)\n",
-		time.Duration(resp.Answer[0].Header().Ttl)*time.Second,
-		s.YesInfo(resp.Authoritative),
-	)
+	fmt.Printf(" (ttl remaining %s)\n", time.Duration(answers[0].Header().Ttl)*time.Second)
 }
 
 func CheckDns(s output.TtyStyler, b output.Bios, name string) net.IP {
