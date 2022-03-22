@@ -206,10 +206,20 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 			ResponseHeaderTimeout: 10 * time.Second,
 			DisableCompression:    true,
 		},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			fmt.Printf("\tRedirected to %s\n", s.Addr(req.URL.String()))
-			return nil
-		},
+	}
+
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		fmt.Printf("Redirected to %s\n", s.Addr(req.URL.String()))
+
+		fmt.Printf("\tUpdating SNI ServerName to %s\n", s.Addr(req.URL.Host))
+		c.Transport.(*http.Transport).TLSClientConfig.ServerName = req.URL.Host
+
+		fmt.Printf("\tUpdating HTTP Host header to %s\n", s.Addr(req.URL.Host))
+		req.Host = req.URL.Host
+
+		// TODO: should re-do DNS checks here cause it can get interesting (try: amazon.com - redirects to www.amazon.com, which is a long CNAME chain)
+
+		return nil
 	}
 
 	return c
@@ -339,6 +349,8 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyP
 
 		fmt.Printf("\tUpdating HTTP Host header to %s\n", s.Addr(req.URL.Host))
 		req.Host = req.URL.Host
+
+		// TODO: should re-do DNS checks here cause it can get interesting (try: amazon.com - redirects to www.amazon.com, which is a long CNAME chain)
 
 		return nil
 	}
