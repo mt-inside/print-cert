@@ -8,6 +8,7 @@ require (
 	github.com/MarshallWace/go-spnego v0.1.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/logrusorgru/aurora/v3 v3.0.0
+	github.com/miekg/dns v1.1.41
 	github.com/mt-inside/http-log v0.0.0-20220321140839-5b3941deb76c
 	github.com/sergi/go-diff v1.2.0
 	github.com/spf13/cobra v1.3.0

@@ -11,14 +11,113 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/MarshallWace/go-spnego"
+	"github.com/miekg/dns"
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
 // TODO print local socket addr - can't find it on the RawConn or the Dialer (localaddr remains nil even after connection)
+
+// Testing:
+// - www.wikipedia.org has CNAME
+// -
+func CheckDNS2(s output.TtyStyler, b output.Bios, name string) net.IP {
+
+	dnsConfig := parseResolvConf(b)
+
+	names := generateFqdns(s, b, name, dnsConfig)
+
+	var in *dns.Msg
+	for _, name := range names {
+		b.PrintInfo(fmt.Sprintf("Trying FQDN on search path: %s", s.Addr(name)))
+
+		m := new(dns.Msg)
+		m.SetQuestion(name, dns.TypeA)
+
+		c := new(dns.Client)
+		c.Dialer = &net.Dialer{Timeout: 5 * time.Second}
+		var err error
+		in, _, err = c.Exchange(m, dnsConfig.servers[0]) // TODO: what do with multiple servers? Think we're meant to try them in order until one suceeds?
+		b.CheckErr(err)
+
+		if len(in.Answer) > 0 {
+			break
+		}
+	}
+
+	// TODO: answers coming back non-authoritative - this is because we're asking a local recursive resolver, not hitting the actual orgs' servers?
+	// TODO: can't manually recurse from the root servers because a lot of the names we'll be looking up will be local so have to hit what's in resolv.conf
+
+	if len(in.Answer) == 0 {
+		b.PrintErr("NXDOMAIN")
+	}
+
+	printCnameChain(s, in.Question[0].Name, in.Answer)
+
+	return nil
+}
+
+func generateFqdns(s output.TtyStyler, b output.Bios, name string, dnsConfig resolvConf) []string {
+
+	dots := strings.Count(name, ".")
+
+	if dots >= dnsConfig.ndots { // considered fully-qualified
+		b.PrintInfo(fmt.Sprintf("name %s has ndots (%d) or more; considered fully-qualified", s.Addr(name), s.Bright(dnsConfig.ndots)))
+		return []string{dns.Fqdn(name)}
+	}
+
+	var fqdns []string
+	for _, search := range dnsConfig.search {
+		fqdns = append(fqdns, dns.Fqdn(name)+search)
+	}
+
+	return fqdns
+}
+
+func printCnameChain(s output.TtyStyler, question string, answers []dns.RR) {
+
+	/* Algo notes
+	 * - CNAMEs can only point to one thing, thus there can only be one "chain" with no branching along the way
+	 * - exception is the last "link" which is the A record(s)
+	 * - CNAMEs can point to other CNAMEs, though it's rare
+	 * - I've not seen any DNS server flatten CNAME chains yet
+	 * - TTL on all returned records will be the same, as they all come in one Answer. Even if you query part-way down the chain to get the end of the chain into the cache, querying further back in the chain will re-assert the later records into the cache, setting their TTLs to be the same as the new ones.
+	 */
+
+	/* Index */
+
+	cnames := map[string]string{}
+	var as []net.IP
+	for _, ans := range answers {
+		switch t := ans.(type) {
+		case *dns.CNAME:
+			cnames[t.Hdr.Name] = t.Target
+		case *dns.A:
+			as = append(as, t.A)
+		}
+	}
+
+	/* Print */
+
+	fmt.Printf("%s ->", s.Addr(question))
+	cname := question
+	for {
+		if target, found := cnames[cname]; found {
+			fmt.Printf(" %s ->", s.Addr(target))
+			cname = target
+		} else {
+			break
+		}
+	}
+
+	fmt.Printf(" %s", s.List(output.IPs2Strings(as), s.AddrStyle))
+
+	fmt.Printf(" (ttl remaining %s)\n", time.Duration(answers[0].Header().Ttl)*time.Second)
+}
 
 func CheckDns(s output.TtyStyler, b output.Bios, name string) net.IP {
 	// TODO use manual DNS code (means parsing resolv.conf, copy code from system resolver to own file to vendor it) to
