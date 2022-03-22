@@ -75,13 +75,14 @@ func appMain(cmd *cobra.Command, args []string) {
 	ip = net.ParseIP(addr)
 	if ip == nil {
 		ips := probes.CheckDNS2(s, b, addr)
-		ip = ips[0] // TODO
-		revName := probes.CheckRevDNS2(s, b, ip)
-		probes.CheckDnsConsistent(s, b, addr, revName)
+		for _, ip := range ips {
+			revName := probes.CheckRevDNS2(s, b, ip)
+			probes.CheckDnsConsistent(s, b, addr, revName)
+		}
 	} else {
-		name := probes.CheckRevDns(s, b, ip)
-		revIp := probes.CheckDns(s, b, name)
-		probes.CheckDnsConsistent(s, b, ip.String(), revIp.String())
+		name := probes.CheckRevDNS2(s, b, ip)
+		probes.CheckDNS2(s, b, name)
+		// Kinda incorrect to check the consistency here. We just do the double reverse as a helpful way to maybe find peers if the IP we've been given
 	}
 
 	host := viper.GetString("host")
