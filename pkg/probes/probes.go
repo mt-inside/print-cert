@@ -11,25 +11,31 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/MarshallWace/go-spnego"
 	"github.com/miekg/dns"
 	"github.com/mt-inside/http-log/pkg/output"
+	"github.com/peterzen/goresolver"
 )
 
 // TODO print local socket addr - can't find it on the RawConn or the Dialer (localaddr remains nil even after connection)
 
-// Testing:
-// - www.wikipedia.org has CNAME
-// -
+/* Testing:
+* - www.wikipedia.org has CNAME
+* - cloudflare.net is DNSSEC
+ */
 func CheckDNS2(s output.TtyStyler, b output.Bios, name string) net.IP {
 
-	dnsConfig := parseResolvConf(b)
+	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
+	b.CheckErr(err)
 
-	names := generateFqdns(s, b, name, dnsConfig)
+	names := dnsConfig.NameList(name)
+
+	c := dns.Client{
+		Dialer: &net.Dialer{Timeout: 5 * time.Second},
+	}
 
 	var in *dns.Msg
 	for _, name := range names {
@@ -38,10 +44,8 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) net.IP {
 		m := new(dns.Msg)
 		m.SetQuestion(name, dns.TypeA)
 
-		c := new(dns.Client)
-		c.Dialer = &net.Dialer{Timeout: 5 * time.Second}
 		var err error
-		in, _, err = c.Exchange(m, dnsConfig.servers[0]) // TODO: what do with multiple servers? Think we're meant to try them in order until one suceeds?
+		in, _, err = c.Exchange(m, net.JoinHostPort(dnsConfig.Servers[0], dnsConfig.Port)) // TODO: what do with multiple servers? Think we're meant to try them in order until one suceeds?
 		b.CheckErr(err)
 
 		if len(in.Answer) > 0 {
@@ -58,24 +62,26 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) net.IP {
 
 	printCnameChain(s, in.Question[0].Name, in.Answer)
 
-	return nil
+	checkDnssec(s, b, in.Question[0].Name)
+
+	return nil // FIXME
 }
 
-func generateFqdns(s output.TtyStyler, b output.Bios, name string, dnsConfig resolvConf) []string {
+func checkDnssec(s output.TtyStyler, b output.Bios, name string) {
+	/* Validate DNSSEC. Options:
+	 * - implement DNSSEC validation manually (using the dns library and doing all the RRSIG, DNSKEY, DS queries right up to the root). This is a massive amount of work
+	 * - use this goresolver library to do that for us (but don't use it for the main queries cause we want more control and visbility)
+	 * - use the system resolver to do it (local stub / router / ISP / whatever) - set the EDNS0 flag in the question and see if the right flag is in the answer
+	 *
+	 * Choice: 2 - goresolver is known to do it properly (recursive resolvers are known to *strip* DNSSEC-related records, let alone not validate them properly).
+	 */
 
-	dots := strings.Count(name, ".")
+	resolver, err := goresolver.NewResolver("/etc/resolv.conf")
+	b.CheckErr(err)
 
-	if dots >= dnsConfig.ndots { // considered fully-qualified
-		b.PrintInfo(fmt.Sprintf("name %s has ndots (%d) or more; considered fully-qualified", s.Addr(name), s.Bright(dnsConfig.ndots)))
-		return []string{dns.Fqdn(name)}
-	}
+	_, err = resolver.StrictNSQuery(name, dns.TypeA)
 
-	var fqdns []string
-	for _, search := range dnsConfig.search {
-		fqdns = append(fqdns, dns.Fqdn(name)+search)
-	}
-
-	return fqdns
+	fmt.Printf("DNSSEC? %s\n", s.YesError(err))
 }
 
 func printCnameChain(s output.TtyStyler, question string, answers []dns.RR) {
