@@ -20,6 +20,10 @@ import (
 	"github.com/peterzen/goresolver"
 )
 
+/* TODO:
+* - single, configurable timeout for all network operations
+ */
+
 /* Testing:
 * - www.wikipedia.org has CNAME
 * - cloudflare.net is DNSSEC
@@ -272,7 +276,7 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
-				Timeout:   10 * time.Second,
+				Timeout:   5 * time.Second,
 				KeepAlive: 30 * time.Second,
 				Control: func(network, address string, rawConn syscall.RawConn) error {
 
@@ -283,7 +287,7 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 					return nil
 				},
 			}).DialContext,
-			ResponseHeaderTimeout: 10 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
 			DisableCompression:    true,
 		},
 	}
@@ -309,7 +313,7 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyP
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				dialer := &net.Dialer{
-					Timeout:   10 * time.Second,
+					Timeout:   5 * time.Second,
 					KeepAlive: 30 * time.Second,
 					// Note: happens "after creating the network connection but before actually dialing."
 					Control: func(network, address string, rawConn syscall.RawConn) error {
@@ -320,13 +324,14 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyP
 					},
 				}
 				conn, err := dialer.DialContext(ctx, network, address)
+				b.CheckErr(err)
 
 				fmt.Printf("L4 connected %s -> %s\n", s.Addr(conn.LocalAddr().String()), s.Addr(conn.RemoteAddr().String()))
 
 				return conn, err
 			},
-			TLSHandshakeTimeout:   10 * time.Second, // assume this is just the TLS handshake ie tcp handshake is covered bby the dialer
-			ResponseHeaderTimeout: 10 * time.Second,
+			TLSHandshakeTimeout:   5 * time.Second, // assume this is just the TLS handshake ie tcp handshake is covered by the dialer
+			ResponseHeaderTimeout: 5 * time.Second,
 			DisableCompression:    true,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true, // deliberate, qv
