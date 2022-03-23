@@ -30,6 +30,15 @@ import (
  */
 func CheckDNS2(s output.TtyStyler, b output.Bios, name string) ([]net.IP, string) {
 
+	/* TODO: be clear that this is just printing info.
+	 * - This only looks in DNS, like say nslookup does.
+	 * - We should (and do) give the /name/ to http client so it can resolve multiple and do failover
+	 * - upshot of that is that it uses the system resolver (go's or libc depending on CGO)
+	 * - This is what we want, so that we also get files etc and anything else they've added into nsswitch
+	 * eg we can't stop it trying localhost.$domain, because it doesn't know "localhost" is special - it's only special cause it's in /etc/hosts.
+	 * - what's actually weird here is that lookup suceedes, stop it doing so (try on other machines, might be a systemd-resolved quirk?
+	 * - then, if DNS lookups fail, call the system resolver (net.LookupHost) and show its answer if it gives one, along with a note that the name is coming from some non-DNS source (varying dpeding on CGO - detect GCO and either print go resolver's list of sources or just say "it's up to your libc")
+	 */
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	b.CheckErr(err)
 
