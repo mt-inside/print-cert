@@ -302,10 +302,12 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyP
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 					b.Trace("Asked for a TLS client certificate")
 
-					/* Load from disk */
 					if certPath == "" || keyPath == "" {
-						panic(errors.New("Need to provide a path to key and cert"))
+						b.PrintWarn("Asked to present a client cert but none configured (-c/-k). Not presenting a cert, this might cause the server to abort the handshake.")
+						return &tls.Certificate{}, nil
 					}
+
+					/* Load from disk */
 					pair, err := tls.LoadX509KeyPair(certPath, keyPath)
 					b.CheckErr(err)
 
