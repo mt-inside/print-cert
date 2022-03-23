@@ -78,16 +78,17 @@ func appMain(cmd *cobra.Command, args []string) {
 		for _, ip := range ips {
 			revNames := probes.CheckRevDNS2(s, b, ip)
 			if len(revNames) > 0 {
-				revName := revNames[0] // TODO: checkConsistent should check for addr in this whole list
-				probes.CheckDnsConsistent(s, b, fqdn, revName)
+				probes.CheckDnsConsistent(s, b, fqdn, revNames)
 			}
 		}
 	} else {
 		names := probes.CheckRevDNS2(s, b, ip)
 		for _, name := range names {
-			probes.CheckDNS2(s, b, name)
+			ips, _ := probes.CheckDNS2(s, b, name)
+			if len(ips) > 0 {
+				probes.CheckRevDnsConsistent(s, b, ip, ips)
+			}
 		}
-		// TODO: checkRevConsistent by checking if the original IP came back as any of the As for any of the names
 	}
 
 	host := viper.GetString("host")

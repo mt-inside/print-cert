@@ -269,10 +269,21 @@ serversLoop:
 	return ends
 }
 
-func CheckDnsConsistent(s output.TtyStyler, b output.Bios, orig string, rev string) {
-	if rev != orig {
-		b.PrintWarn(fmt.Sprintf("dns inconsistency: %s != %s\n", s.Addr(orig), s.Addr(rev)))
+func CheckDnsConsistent(s output.TtyStyler, b output.Bios, orig string, revs []string) {
+	for _, rev := range revs {
+		if rev == orig {
+			return
+		}
 	}
+	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s\n", s.Addr(orig), s.List(revs, s.AddrStyle)))
+}
+func CheckRevDnsConsistent(s output.TtyStyler, b output.Bios, orig net.IP, revs []net.IP) {
+	for _, rev := range revs {
+		if rev.Equal(orig) {
+			return
+		}
+	}
+	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s\n", s.Addr(orig.String()), s.List(output.IPs2Strings(revs), s.AddrStyle)))
 }
 
 func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
