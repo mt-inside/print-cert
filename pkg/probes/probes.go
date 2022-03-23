@@ -20,8 +20,6 @@ import (
 	"github.com/peterzen/goresolver"
 )
 
-// TODO print local socket addr - can't find it on the RawConn or the Dialer (localaddr remains nil even after connection)
-
 /* Testing:
 * - www.wikipedia.org has CNAME
 * - cloudflare.net is DNSSEC
@@ -280,18 +278,24 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyPath string, krb, http11 bool) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   10 * time.Second,
-				KeepAlive: 30 * time.Second,
-				Control: func(network, address string, rawConn syscall.RawConn) error {
+			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				dialer := &net.Dialer{
+					Timeout:   10 * time.Second,
+					KeepAlive: 30 * time.Second,
+					// Note: happens "after creating the network connection but before actually dialing."
+					Control: func(network, address string, rawConn syscall.RawConn) error {
+						b.Banner("TCP")
+						b.Trace("Dialing", "addr", address)
 
-					b.Banner("TCP")
-					// Note: happens when it attempts to connect, not when it has
-					fmt.Println("Dialing ", s.Addr(address))
+						return nil
+					},
+				}
+				conn, err := dialer.DialContext(ctx, network, address)
 
-					return nil
-				},
-			}).DialContext,
+				fmt.Printf("L4 connected %s -> %s\n", s.Addr(conn.LocalAddr().String()), s.Addr(conn.RemoteAddr().String()))
+
+				return conn, err
+			},
 			TLSHandshakeTimeout:   10 * time.Second, // assume this is just the TLS handshake ie tcp handshake is covered bby the dialer
 			ResponseHeaderTimeout: 10 * time.Second,
 			DisableCompression:    true,
