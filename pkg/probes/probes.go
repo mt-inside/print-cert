@@ -453,6 +453,11 @@ func CheckTls(s output.TtyStyler, b output.Bios, client *http.Client, req *http.
 	b.Banner("Request")
 
 	fmt.Printf("Beginning request...\n")
+	host, port, err := net.SplitHostPort(req.URL.Host)
+	b.CheckErr(err)
+	systemRemoteIPs, err := net.LookupHost(host) // ie what the system resolver comes up with, as that's what the http client will use, and it includes files and other nsswitch stuff not just what we manually find in DNS
+	b.CheckErr(err)
+	fmt.Printf("\tTCP addresses: %s\n", s.List(output.ZipHostsPort(systemRemoteIPs, port), s.AddrStyle))
 	if req.URL.Scheme == "https" {
 		fmt.Printf("\tTLS handshake: SNI ServerName %s\n", s.Addr(client.Transport.(*http.Transport).TLSClientConfig.ServerName))
 	}
