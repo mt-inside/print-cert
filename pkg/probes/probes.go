@@ -40,53 +40,63 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) ([]net.IP, string
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	b.CheckErr(err)
 
-	server := net.JoinHostPort(dnsConfig.Servers[0], dnsConfig.Port) // TODO: what do with multiple servers? Think we're meant to try them in order until one suceeds?
-
 	names := dnsConfig.NameList(name)
 
 	c := dns.Client{
 		Dialer: &net.Dialer{Timeout: 5 * time.Second},
 	}
 
+	var server string
+	var fqdn string
 	var in *dns.Msg // Just takes the value of the last one in the loop, ie the v6 AAAA answer, but servers are authoritative for /zones/ so if it's auth for v6 is it for v4 too (cause we're talking forward zones)
 	var answers []dns.RR
-	var fqdn string
-	for _, name := range names {
-		b.Trace("Trying search path item", "fqdn", name)
+serversLoop:
+	for _, serverHost := range dnsConfig.Servers {
+		server = net.JoinHostPort(serverHost, dnsConfig.Port)
+		b.Trace("Trying DNS server", "addr", server)
 
-		var err error
+		for _, name := range names {
+			b.Trace("Trying search path item", "fqdn", name)
 
-		/* v4 */
+			var err error
 
-		m := new(dns.Msg)
-		// By default this sets the flag to ask whatever server is configured to recurse for us. We could manually recurse, either continually against the system server (thus using its cache), or from the root servers down. However both are a huge amount of work for no gain
-		m.SetQuestion(name, dns.TypeA)
+			/* v4 */
 
-		in, _, err = c.Exchange(m, server)
-		b.CheckErr(err)
+			m := new(dns.Msg)
+			// By default this sets the flag to ask whatever server is configured to recurse for us. We could manually recurse, either continually against the system server (thus using its cache), or from the root servers down. However both are a huge amount of work for no gain
+			m.SetQuestion(name, dns.TypeA)
 
-		answers = append(answers, in.Answer...)
+			in, _, err = c.Exchange(m, server)
+			if err != nil {
+				continue serversLoop
+			}
 
-		// TODO: answers coming back non-authoritative - this is because we're asking a local recursive resolver, not hitting the actual orgs' servers?
+			answers = append(answers, in.Answer...)
 
-		/* v6 */
+			/* v6 */
 
-		m = new(dns.Msg)
-		m.SetQuestion(name, dns.TypeAAAA)
+			m = new(dns.Msg)
+			m.SetQuestion(name, dns.TypeAAAA)
 
-		in, _, err = c.Exchange(m, server)
-		b.CheckErr(err)
+			in, _, err = c.Exchange(m, server)
+			if err != nil {
+				continue serversLoop
+			}
 
-		answers = append(answers, in.Answer...)
+			answers = append(answers, in.Answer...)
 
-		if len(answers) > 0 {
-			fqdn = name
-			break
+			if len(answers) > 0 {
+				fqdn = name
+				break serversLoop
+			}
+		}
+
+		if len(answers) == 0 {
+			b.PrintErr("NXDOMAIN")
 		}
 	}
-
 	if len(answers) == 0 {
-		b.PrintErr("NXDOMAIN")
+		b.PrintErr("SERVFAIL")
 	}
 
 	/* Validate DNSSEC. Options:
@@ -166,34 +176,62 @@ func printCnameChain(s output.TtyStyler, b output.Bios, question string, answers
 
 func CheckRevDNS2(s output.TtyStyler, b output.Bios, ip net.IP) []string {
 
-	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
-	b.CheckErr(err)
-
-	server := net.JoinHostPort(dnsConfig.Servers[0], dnsConfig.Port) // TODO: what do with multiple servers? Think we're meant to try them in order until one suceeds?
-
 	revIp, err := dns.ReverseAddr(ip.String())
 	b.CheckErr(err)
 
 	b.Trace("Resolving in reverse-zone", "address", revIp)
 
+	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
+	b.CheckErr(err)
+
 	c := dns.Client{
 		Dialer: &net.Dialer{Timeout: 5 * time.Second},
 	}
 
-	m := new(dns.Msg)
-	// By default this sets the flag to ask whatever server is configured to recurse for us. We could manually recurse, either continually against the system server (thus using its cache), or from the root servers down. However both are a huge amount of work for no gain
-	m.SetQuestion(revIp, dns.TypePTR)
+	var server string
+	var in *dns.Msg
+	var answers []dns.RR
+serversLoop:
+	for _, serverHost := range dnsConfig.Servers {
+		server = net.JoinHostPort(serverHost, dnsConfig.Port)
+		b.Trace("Trying DNS server", "addr", server)
 
-	in, _, err := c.Exchange(m, server)
-	b.CheckErr(err)
+		var err error
 
-	if len(in.Answer) == 0 {
-		b.PrintWarn("NXDOMAIN")
-		return []string{}
+		m := new(dns.Msg)
+		// By default this sets the flag to ask whatever server is configured to recurse for us. We could manually recurse, either continually against the system server (thus using its cache), or from the root servers down. However both are a huge amount of work for no gain
+		m.SetQuestion(revIp, dns.TypePTR)
+
+		in, _, err = c.Exchange(m, server)
+		if err != nil {
+			continue serversLoop
+		}
+
+		answers = append(answers, in.Answer...)
+
+		if len(answers) > 0 {
+			break serversLoop
+		}
+
+		if len(in.Answer) == 0 {
+			b.PrintWarn("NXDOMAIN")
+		}
+	}
+	if len(answers) == 0 {
+		b.PrintWarn("SERVFAIL")
 	}
 
+	/* Validate DNSSEC */
+
+	resolver, err := goresolver.NewResolver("/etc/resolv.conf")
+	b.CheckErr(err)
+
+	_, dnssecErr := resolver.StrictNSQuery(in.Question[0].Name, dns.TypePTR)
+
+	/* Print */
+
 	var ends []string
-	for _, ans := range in.Answer {
+	for _, ans := range answers {
 		if ptr, ok := ans.(*dns.PTR); ok {
 			if ptr.Hdr.Name != revIp {
 				// Because chains are (I think) permitted, we theoretically have a tree structure. Make sure it's flat for now
@@ -205,15 +243,6 @@ func CheckRevDNS2(s output.TtyStyler, b output.Bios, ip net.IP) []string {
 			panic(errors.New("non-PTR record returned"))
 		}
 	}
-
-	/* Validate DNSSEC */
-
-	resolver, err := goresolver.NewResolver("/etc/resolv.conf")
-	b.CheckErr(err)
-
-	_, dnssecErr := resolver.StrictNSQuery(in.Question[0].Name, dns.TypePTR)
-
-	/* Print */
 
 	fmt.Printf(
 		"%s -> %s (dnssec? %s, ttl remaining %s)\n",
