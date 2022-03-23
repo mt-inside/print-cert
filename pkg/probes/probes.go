@@ -54,7 +54,7 @@ func CheckDNS2(s output.TtyStyler, b output.Bios, name string) ([]net.IP, string
 	var answers []dns.RR
 	var fqdn string
 	for _, name := range names {
-		b.PrintInfo(fmt.Sprintf("Trying FQDN on search path: %s", s.Addr(name)))
+		b.Trace("Trying search path item", "fqdn", name)
 
 		var err error
 
@@ -176,7 +176,7 @@ func CheckRevDNS2(s output.TtyStyler, b output.Bios, ip net.IP) []string {
 	revIp, err := dns.ReverseAddr(ip.String())
 	b.CheckErr(err)
 
-	b.PrintInfo(fmt.Sprintf("Trying reversed IP: %s", s.Addr(revIp)))
+	b.Trace("Resolving in reverse-zone", "address", revIp)
 
 	c := dns.Client{
 		Dialer: &net.Dialer{Timeout: 5 * time.Second},
