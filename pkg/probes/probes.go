@@ -275,18 +275,25 @@ func CheckDnsConsistent(s output.TtyStyler, b output.Bios, orig string, rev stri
 func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   5 * time.Second,
-				KeepAlive: 30 * time.Second,
-				Control: func(network, address string, rawConn syscall.RawConn) error {
+			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				dialer := &net.Dialer{
+					Timeout:   5 * time.Second,
+					KeepAlive: 30 * time.Second,
+					// Note: happens "after creating the network connection but before actually dialing."
+					Control: func(network, address string, rawConn syscall.RawConn) error {
+						b.Banner("TCP")
+						b.Trace("Dialing", "addr", address)
 
-					b.Banner("TCP")
-					// Note: happens when it attempts to connect, not when it has
-					fmt.Println("Dialing ", s.Addr(address))
+						return nil
+					},
+				}
+				conn, err := dialer.DialContext(ctx, network, address)
+				b.CheckErr(err)
 
-					return nil
-				},
-			}).DialContext,
+				fmt.Printf("L4 connected %s -> %s\n", s.Addr(conn.LocalAddr().String()), s.Addr(conn.RemoteAddr().String()))
+
+				return conn, err
+			},
 			ResponseHeaderTimeout: 5 * time.Second,
 			DisableCompression:    true,
 		},
