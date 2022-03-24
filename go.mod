@@ -9,7 +9,8 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/logrusorgru/aurora/v3 v3.0.0
 	github.com/miekg/dns v1.1.41
-	github.com/mt-inside/http-log v0.0.0-20220321140839-5b3941deb76c
+	github.com/mt-inside/http-log v0.0.0-20220323162902-6f29756ae159
+	github.com/peterzen/goresolver v1.0.2
 	github.com/sergi/go-diff v1.2.0
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.0
@@ -34,7 +35,6 @@ require (
 	github.com/mitchellh/mapstructure v1.4.3 // indirect
 	github.com/mt-inside/go-usvc v0.0.4 // indirect
 	github.com/pelletier/go-toml v1.9.4 // indirect
-	github.com/peterzen/goresolver v1.0.2 // indirect
 	github.com/spf13/afero v1.6.0 // indirect
 	github.com/spf13/cast v1.4.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
