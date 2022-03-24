@@ -224,7 +224,8 @@ serversLoop:
 		}
 	}
 	if len(answers) == 0 {
-		b.PrintWarn("All DNS servers failed.")
+		b.PrintWarn("All DNS servers returned no answers or failed.")
+		return []string{}
 	}
 
 	/* Validate DNSSEC */
