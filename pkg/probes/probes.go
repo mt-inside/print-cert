@@ -170,7 +170,7 @@ func printCnameChain(s output.TtyStyler, b output.Bios, question string, answers
 		}
 	}
 
-	fmt.Printf(" %s", s.List(output.IPs2Strings(as), s.AddrStyle))
+	fmt.Printf(" %s", s.List(output.Slice2Strings(as), s.AddrStyle))
 
 	fmt.Printf(" (dnssec? %s, ttl remaining %s)\n",
 		s.YesError(dnssecErr),
