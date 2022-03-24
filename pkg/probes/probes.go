@@ -96,11 +96,13 @@ serversLoop:
 		}
 
 		if len(answers) == 0 {
-			b.PrintErr("NXDOMAIN")
+			// Not fatal cause we're only printing for information
+			b.PrintWarn("NXDOMAIN")
 		}
 	}
 	if len(answers) == 0 {
-		b.PrintErr("SERVFAIL")
+		b.PrintWarn("All DNS servers returned no answers or failed.")
+		return []net.IP{}, name
 	}
 
 	/* Validate DNSSEC. Options:
@@ -222,7 +224,7 @@ serversLoop:
 		}
 	}
 	if len(answers) == 0 {
-		b.PrintWarn("SERVFAIL")
+		b.PrintWarn("All DNS servers failed.")
 	}
 
 	/* Validate DNSSEC */
