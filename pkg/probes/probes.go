@@ -292,7 +292,7 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 				conn, err := dialer.DialContext(ctx, network, address)
 				b.CheckErr(err)
 
-				fmt.Printf("L4 connected %s -> %s\n", s.Addr(conn.LocalAddr().String()), s.Addr(conn.RemoteAddr().String()))
+				fmt.Printf("Connected %s -> %s\n", s.Addr(conn.LocalAddr().String()), s.Addr(conn.RemoteAddr().String()))
 
 				return conn, err
 			},
@@ -335,7 +335,7 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyP
 				conn, err := dialer.DialContext(ctx, network, address)
 				b.CheckErr(err)
 
-				fmt.Printf("L4 connected %s -> %s\n", s.Addr(conn.LocalAddr().String()), s.Addr(conn.RemoteAddr().String()))
+				fmt.Printf("Connected %s -> %s\n", s.Addr(conn.LocalAddr().String()), s.Addr(conn.RemoteAddr().String()))
 
 				return conn, err
 			},
