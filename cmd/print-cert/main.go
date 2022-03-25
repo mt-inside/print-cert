@@ -14,7 +14,8 @@ import (
 )
 
 /* TODO
-* - show dnssec and dane status of name
+* - show dane and other stati of name
+* - take option to enable DNS info printing (default off)
  */
 
 func init() {
