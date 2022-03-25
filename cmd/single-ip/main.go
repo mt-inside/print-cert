@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"time"
 
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/mt-inside/http-log/pkg/output"
@@ -26,6 +27,7 @@ func main() {
 	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate file")
 	cmd.Flags().StringP("key", "k", "", "Path to TLS client key file")
 	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
+	cmd.Flags().DurationP("timeout", "t", 5*time.Second, "Timeout for each individual network operation")
 	err := viper.BindPFlags(cmd.Flags())
 	if err != nil {
 		panic(errors.New("Can't set up flags"))
@@ -61,9 +63,9 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	b.Banner("DNS")
 
-	probes.DNSInfo(s, b, f5Host)
+	probes.DNSInfo(s, b, viper.GetDuration("timeout"), f5Host)
 
-	probes.DNSInfo(s, b, nsIP.String())
+	probes.DNSInfo(s, b, viper.GetDuration("timeout"), nsIP.String())
 
 	//do for f5 and ns. For ns, don't rely on the dns so use f5host
 
@@ -74,13 +76,13 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	switch scheme {
 	case "http":
-		client := probes.GetPlaintextClient(s, b)
-		req, cancel := probes.GetHTTPRequest(s, b, scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
+		client := probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
+		req, cancel := probes.GetHTTPRequest(s, b, viper.GetDuration("timeout"), scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
 		defer cancel()
 		f5Body = probes.CheckTLS(s, b, client, req)
 	case "https":
-		client := probes.GetTLSClient(s, b, f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
-		req, cancel := probes.GetHTTPRequest(s, b, scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
+		client := probes.GetTLSClient(s, b, viper.GetDuration("timeout"), f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
+		req, cancel := probes.GetHTTPRequest(s, b, viper.GetDuration("timeout"), scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
 		defer cancel()
 		f5Body = probes.CheckTLS(s, b, client, req)
 	}
@@ -92,13 +94,13 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	switch scheme {
 	case "http":
-		client := probes.GetPlaintextClient(s, b)
-		req, cancel := probes.GetHTTPRequest(s, b, scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"))
+		client := probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
+		req, cancel := probes.GetHTTPRequest(s, b, viper.GetDuration("timeout"), scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"))
 		defer cancel()
 		nsBody = probes.CheckTLS(s, b, client, req)
 	case "https":
-		client := probes.GetTLSClient(s, b, f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
-		req, cancel := probes.GetHTTPRequest(s, b, scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"))
+		client := probes.GetTLSClient(s, b, viper.GetDuration("timeout"), f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
+		req, cancel := probes.GetHTTPRequest(s, b, viper.GetDuration("timeout"), scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"))
 		defer cancel()
 		nsBody = probes.CheckTLS(s, b, client, req)
 	}

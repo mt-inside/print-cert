@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/logrusorgru/aurora/v3"
@@ -41,6 +42,7 @@ func main() {
 	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
 	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
 	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
+	cmd.Flags().DurationP("timeout", "t", 5*time.Second, "Timeout for each individual network operation")
 	err := viper.BindPFlags(cmd.Flags())
 	if err != nil {
 		panic(errors.New("Can't set up flags"))
@@ -66,7 +68,7 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	b.Banner("DNS (information only)")
 
-	probes.DNSInfo(s, b, addr)
+	probes.DNSInfo(s, b, viper.GetDuration("timeout"), addr)
 
 	host := viper.GetString("host")
 	if host == "" {
@@ -80,12 +82,12 @@ func appMain(cmd *cobra.Command, args []string) {
 	var client *http.Client
 	switch scheme {
 	case "http":
-		client = probes.GetPlaintextClient(s, b)
+		client = probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
 	case "https":
-		client = probes.GetTLSClient(s, b, sni, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http-11"))
+		client = probes.GetTLSClient(s, b, viper.GetDuration("timeout"), sni, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http-11"))
 	}
 
-	req, cancel := probes.GetHTTPRequest(s, b, scheme, addr, port, host, viper.GetString("path"))
+	req, cancel := probes.GetHTTPRequest(s, b, viper.GetDuration("timeout"), scheme, addr, port, host, viper.GetString("path"))
 	defer cancel()
 
 	rawBody := probes.CheckTLS(
