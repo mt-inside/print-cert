@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -40,19 +41,14 @@ func main() {
 	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
 	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
 	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
-	viper.BindPFlag("sni", cmd.Flags().Lookup("sni"))
-	viper.BindPFlag("host", cmd.Flags().Lookup("host"))
-	viper.BindPFlag("path", cmd.Flags().Lookup("path"))
-	viper.BindPFlag("ca", cmd.Flags().Lookup("ca"))
-	viper.BindPFlag("cert", cmd.Flags().Lookup("cert"))
-	viper.BindPFlag("key", cmd.Flags().Lookup("key"))
-	viper.BindPFlag("kerberos", cmd.Flags().Lookup("kerberos"))
-	viper.BindPFlag("printBody", cmd.Flags().Lookup("print-body"))
-	viper.BindPFlag("http11", cmd.Flags().Lookup("http11"))
-
-	err := cmd.Execute()
+	err := viper.BindPFlags(cmd.Flags())
 	if err != nil {
-		fmt.Println("Error during execution: %v", err)
+		panic(errors.New("Can't set up flags"))
+	}
+
+	err = cmd.Execute()
+	if err != nil {
+		fmt.Println("Error during execution:", err)
 	}
 }
 
@@ -86,19 +82,19 @@ func appMain(cmd *cobra.Command, args []string) {
 	case "http":
 		client = probes.GetPlaintextClient(s, b)
 	case "https":
-		client = probes.GetTLSClient(s, b, sni, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
+		client = probes.GetTLSClient(s, b, sni, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http-11"))
 	}
 
-	req, cancel := probes.GetHttpRequest(s, b, scheme, addr, port, host, viper.GetString("path"))
+	req, cancel := probes.GetHTTPRequest(s, b, scheme, addr, port, host, viper.GetString("path"))
 	defer cancel()
 
-	rawBody := probes.CheckTls(
+	rawBody := probes.CheckTLS(
 		s, b,
 		client,
 		req,
 	)
 
-	if viper.GetBool("printBody") {
+	if viper.GetBool("print-body") {
 		fmt.Println(string(rawBody))
 	}
 

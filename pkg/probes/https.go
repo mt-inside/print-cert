@@ -42,6 +42,9 @@ func getCheckRedirect(s output.TtyStyler, b output.Bios, c *http.Client) func(*h
 		return nil
 	}
 }
+
+// GetPlaintextClient returns an HTTP Client for calling non-TLS endpoints.
+// It prints lots of info along the way.
 func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
@@ -73,9 +76,15 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 
 	return c
 }
+
+// GetTLSClient returns an HTTP Client for calling TLS-enabled endpoints.
+// It prints lots of info along the way.
 func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyPath string, krb, http11 bool) *http.Client {
-	c := &http.Client{
-		Transport: &http.Transport{
+
+	// Always make a krb transport, becuase if we make a plain HTTP one and try to wrap it later, we have to copy the bytes (because spnego.Transport embeds http.Transport) and that copies a sync.Mutex.
+	tr := &spnego.Transport{
+		NoCanonicalize: true,
+		Transport: http.Transport{
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				dialer := &net.Dialer{
 					Timeout:   5 * time.Second,
@@ -195,8 +204,12 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyP
 		},
 	}
 
+	// Assuming we don't want krb, just point to the non-spnego parts of the struct
+	c := &http.Client{
+		Transport: &tr.Transport,
+	}
 	if krb {
-		c.Transport = &spnego.Transport{NoCanonicalize: true, Transport: *c.Transport.(*http.Transport)}
+		c = &http.Client{Transport: tr}
 	}
 
 	// Really ugly that this can't be set in the literal (so that it can reference and reach into the client and mutate it)
@@ -205,7 +218,8 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyP
 	return c
 }
 
-func GetHttpRequest(s output.TtyStyler, b output.Bios, scheme, addr, port, host, path string) (*http.Request, context.CancelFunc) {
+// GetHTTPRequest returns an HTTP Request that can be used to call endpoints under test.
+func GetHTTPRequest(s output.TtyStyler, b output.Bios, scheme, addr, port, host, path string) (*http.Request, context.CancelFunc) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
@@ -256,7 +270,9 @@ func printRequestPreamble(s output.TtyStyler, b output.Bios, client *http.Client
 	fmt.Printf("\tHTTP request: Host %s | %s %s\n", s.Addr(req.Host), s.Verb(req.Method), s.UrlPath(req.URL))
 }
 
-func CheckTls(s output.TtyStyler, b output.Bios, client *http.Client, req *http.Request) []byte {
+// CheckTLS sends the given request using the given client.
+// It prints information about what's returned.
+func CheckTLS(s output.TtyStyler, b output.Bios, client *http.Client, req *http.Request) []byte {
 
 	b.Banner("Request")
 

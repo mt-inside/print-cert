@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -25,14 +26,14 @@ func main() {
 	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate file")
 	cmd.Flags().StringP("key", "k", "", "Path to TLS client key file")
 	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
-	viper.BindPFlag("ca", cmd.Flags().Lookup("ca"))
-	viper.BindPFlag("cert", cmd.Flags().Lookup("cert"))
-	viper.BindPFlag("key", cmd.Flags().Lookup("key"))
-	viper.BindPFlag("printBody", cmd.Flags().Lookup("print-body"))
-
-	err := cmd.Execute()
+	err := viper.BindPFlags(cmd.Flags())
 	if err != nil {
-		fmt.Println("Error during execution: %v", err)
+		panic(errors.New("Can't set up flags"))
+	}
+
+	err = cmd.Execute()
+	if err != nil {
+		fmt.Println("Error during execution:", err)
 	}
 }
 
@@ -43,30 +44,26 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	f5Host := args[0]
 	f5Port := args[1]
-	nsIp := net.ParseIP(args[2])
+	nsIP := net.ParseIP(args[2])
 	nsPort := args[3]
 	scheme := args[4]
 
-	if nsIp == nil {
+	if nsIP == nil {
 		b.CheckErr(fmt.Errorf("Invalid IP: %s", args[2]))
 	}
 	if !(scheme == "http" || scheme == "https") {
 		b.CheckErr(fmt.Errorf("Unknown scheme: %s", scheme))
 	}
 
-	fmt.Printf("Testing NetScaler VIP %v against F5 service %v\n", s.Addr(nsIp.String()), s.Addr(f5Host))
+	fmt.Printf("Testing NetScaler VIP %v against F5 service %v\n", s.Addr(nsIP.String()), s.Addr(f5Host))
 
 	/* Check DNS */
 
 	b.Banner("DNS")
 
-	f5Ip := probes.CheckDns(s, b, f5Host)
-	f5RevHost := probes.CheckRevDns(s, b, f5Ip)
-	probes.CheckDnsConsistent(s, b, f5Host, f5RevHost)
+	probes.DNSInfo(s, b, f5Host)
 
-	nsHost := probes.CheckRevDns(s, b, nsIp)
-	nsRevIp := probes.CheckDns(s, b, nsHost)
-	probes.CheckDnsConsistent(s, b, nsIp.String(), nsRevIp.String())
+	probes.DNSInfo(s, b, nsIP.String())
 
 	//do for f5 and ns. For ns, don't rely on the dns so use f5host
 
@@ -78,14 +75,14 @@ func appMain(cmd *cobra.Command, args []string) {
 	switch scheme {
 	case "http":
 		client := probes.GetPlaintextClient(s, b)
-		req, cancel := probes.GetHttpRequest(s, b, scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
+		req, cancel := probes.GetHTTPRequest(s, b, scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
 		defer cancel()
-		f5Body = probes.CheckTls(s, b, client, req)
+		f5Body = probes.CheckTLS(s, b, client, req)
 	case "https":
 		client := probes.GetTLSClient(s, b, f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
-		req, cancel := probes.GetHttpRequest(s, b, scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
+		req, cancel := probes.GetHTTPRequest(s, b, scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
 		defer cancel()
-		f5Body = probes.CheckTls(s, b, client, req)
+		f5Body = probes.CheckTLS(s, b, client, req)
 	}
 
 	/* Check NetScaler */
@@ -96,21 +93,21 @@ func appMain(cmd *cobra.Command, args []string) {
 	switch scheme {
 	case "http":
 		client := probes.GetPlaintextClient(s, b)
-		req, cancel := probes.GetHttpRequest(s, b, scheme, nsIp.String(), nsPort, f5Host, viper.GetString("path"))
+		req, cancel := probes.GetHTTPRequest(s, b, scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"))
 		defer cancel()
-		nsBody = probes.CheckTls(s, b, client, req)
+		nsBody = probes.CheckTLS(s, b, client, req)
 	case "https":
 		client := probes.GetTLSClient(s, b, f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
-		req, cancel := probes.GetHttpRequest(s, b, scheme, nsIp.String(), nsPort, f5Host, viper.GetString("path"))
+		req, cancel := probes.GetHTTPRequest(s, b, scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"))
 		defer cancel()
-		nsBody = probes.CheckTls(s, b, client, req)
+		nsBody = probes.CheckTLS(s, b, client, req)
 	}
 
 	/* Body diff */
 
 	b.Banner("Differences")
 
-	if viper.GetBool("printBody") {
+	if viper.GetBool("print-body") {
 		fmt.Println("NETSCALER response body:")
 		fmt.Println(string(nsBody))
 	}

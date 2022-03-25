@@ -11,6 +11,7 @@ import (
 	"github.com/peterzen/goresolver"
 )
 
+// DNSInfo prints detailed results from forward and reverse zone resolution of the given address. addr can be either a hostname or an IPv4/6
 func DNSInfo(s output.TtyStyler, b output.Bios, addr string) {
 	ip := net.ParseIP(addr)
 	if ip == nil {
@@ -188,10 +189,10 @@ func printCnameChain(s output.TtyStyler, b output.Bios, question string, answers
 
 func queryRevDNS(s output.TtyStyler, b output.Bios, ip net.IP) []string {
 
-	revIp, err := dns.ReverseAddr(ip.String())
+	revIP, err := dns.ReverseAddr(ip.String())
 	b.CheckErr(err)
 
-	b.Trace("Resolving in reverse-zone", "address", revIp)
+	b.Trace("Resolving in reverse-zone", "address", revIP)
 
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	b.CheckErr(err)
@@ -210,7 +211,7 @@ serversLoop:
 
 		m := new(dns.Msg)
 		// By default this sets the flag to ask whatever server is configured to recurse for us. We could manually recurse, either continually against the system server (thus using its cache), or from the root servers down. However both are a huge amount of work for no gain
-		m.SetQuestion(revIp, dns.TypePTR)
+		m.SetQuestion(revIP, dns.TypePTR)
 
 		in, _, err = c.Exchange(m, server)
 		if err != nil {
@@ -244,7 +245,7 @@ serversLoop:
 	var ends []string
 	for _, ans := range answers {
 		if ptr, ok := ans.(*dns.PTR); ok {
-			if ptr.Hdr.Name != revIp {
+			if ptr.Hdr.Name != revIP {
 				// Because chains are (I think) permitted, we theoretically have a tree structure. Make sure it's flat for now
 				panic(errors.New("PTR chain"))
 			}
