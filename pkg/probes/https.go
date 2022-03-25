@@ -28,7 +28,7 @@ func getCheckRedirect(s output.TtyStyler, b output.Bios, c *http.Client) func(*h
 		fmt.Printf("Redirected to %s\n", s.Addr(req.URL.String()))
 
 		b.Trace("Updating TLS ClientHello", "ServerName", req.URL.Host)
-		c.Transport.(*http.Transport).TLSClientConfig.ServerName = req.URL.Host
+		getUnderlyingHttpTransport(c).TLSClientConfig.ServerName = req.URL.Host
 
 		b.Trace("Updating HTTP request", "Host", req.URL.Host)
 		req.Host = req.URL.Host
@@ -265,7 +265,7 @@ func printRequestPreamble(s output.TtyStyler, b output.Bios, client *http.Client
 	b.CheckErr(err)
 	fmt.Printf("\tTCP addresses: %s (from system/golang resolver)\n", s.List(output.ZipHostsPort(systemRemoteIPs, port), s.AddrStyle))
 	if req.URL.Scheme == "https" {
-		fmt.Printf("\tTLS handshake: SNI ServerName %s\n", s.Addr(client.Transport.(*http.Transport).TLSClientConfig.ServerName))
+		fmt.Printf("\tTLS handshake: SNI ServerName %s\n", s.Addr(getUnderlyingHttpTransport(client).TLSClientConfig.ServerName))
 	}
 	fmt.Printf("\tHTTP request: Host %s | %s %s\n", s.Addr(req.Host), s.Verb(req.Method), s.UrlPath(req.URL))
 }
@@ -310,4 +310,15 @@ func CheckTLS(s output.TtyStyler, b output.Bios, client *http.Client, req *http.
 	fmt.Printf("\tactual %s bytes of body read\n", s.Bright(strconv.FormatInt(int64(len(rawBody)), 10)))
 
 	return rawBody
+}
+
+func getUnderlyingHttpTransport(client *http.Client) *http.Transport {
+	switch c := client.Transport.(type) {
+	case *http.Transport:
+		return c
+	case *spnego.Transport:
+		return &c.Transport
+	default:
+		panic("Bottom")
+	}
 }
