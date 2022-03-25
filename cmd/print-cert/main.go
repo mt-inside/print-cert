@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 
@@ -68,28 +67,9 @@ func appMain(cmd *cobra.Command, args []string) {
 		b.CheckErr(fmt.Errorf("Unknown scheme: %s", scheme))
 	}
 
-	var ip net.IP
+	b.Banner("DNS (information only)")
 
-	b.Banner("DNS")
-
-	ip = net.ParseIP(addr)
-	if ip == nil {
-		ips, fqdn := probes.CheckDNS2(s, b, addr)
-		for _, ip := range ips {
-			revNames := probes.CheckRevDNS2(s, b, ip)
-			if len(revNames) > 0 {
-				probes.CheckDnsConsistent(s, b, fqdn, revNames)
-			}
-		}
-	} else {
-		names := probes.CheckRevDNS2(s, b, ip)
-		for _, name := range names {
-			ips, _ := probes.CheckDNS2(s, b, name)
-			if len(ips) > 0 {
-				probes.CheckRevDnsConsistent(s, b, ip, ips)
-			}
-		}
-	}
+	probes.DNSInfo(s, b, addr)
 
 	host := viper.GetString("host")
 	if host == "" {
