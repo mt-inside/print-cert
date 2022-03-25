@@ -226,8 +226,8 @@ func GetHttpRequest(s output.TtyStyler, b output.Bios, scheme, addr, port, host,
 	req, err := http.NewRequestWithContext(ctx, "GET", l7Addr.String(), nil)
 	b.CheckErr(err)
 	// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
-	if port == "443" {
-		req.Host = host
+	if port == "80" || port == "443" {
+		req.Host = host // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
 	} else {
 		req.Host = hostPort
 	}
