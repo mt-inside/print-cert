@@ -23,6 +23,8 @@ import (
 
 func getCheckRedirect(s output.TtyStyler, b output.Bios, c *http.Client) func(*http.Request, []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
+		b.Banner("Redirect")
+
 		fmt.Printf("Redirected to %s\n", s.Addr(req.URL.String()))
 
 		b.Trace("Updating TLS ClientHello", "ServerName", req.URL.Host)
