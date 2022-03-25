@@ -316,6 +316,7 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		fmt.Printf("Redirected to %s\n", s.Addr(req.URL.String()))
 
+		// TODO: rerun the preamble - print system resolver result, SNI, vhost (update them here, then call a factored-out preamble printer (from CheckTls) that inspects the Req
 		fmt.Printf("\tUpdating SNI ServerName to %s\n", s.Addr(req.URL.Host))
 		c.Transport.(*http.Transport).TLSClientConfig.ServerName = req.URL.Host
 
@@ -323,6 +324,7 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 		req.Host = req.URL.Host
 
 		// TODO: should re-do DNS checks here cause it can get interesting (try: amazon.com - redirects to www.amazon.com, which is a long CNAME chain)
+		// - factor the whole block out of main to CheckDNS(addr - might be name or ip). Rename check[rev]DNS2 to query*DNS
 
 		return nil
 	}
