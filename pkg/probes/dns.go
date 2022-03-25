@@ -70,8 +70,6 @@ serversLoop:
 		for _, name := range names {
 			b.Trace("Trying search path item", "fqdn", name)
 
-			var err error
-
 			/* v4 */
 
 			m := new(dns.Msg)
@@ -103,13 +101,13 @@ serversLoop:
 			}
 		}
 
-		if len(answers) == 0 {
-			// Not fatal cause we're only printing for information
-			b.PrintWarn("NXDOMAIN")
-		}
+		//assert(len(answers) == 0)
+		// Not fatal cause we're only printing for information
+		b.PrintWarn(fmt.Sprintf("%s: NXDOMAIN", s.Addr(name)))
+		return []net.IP{}, name
 	}
-	if len(answers) == 0 {
-		b.PrintWarn("All DNS servers returned no answers or failed.")
+	if err != nil {
+		b.PrintWarn("All DNS servers failed.")
 		return []net.IP{}, name
 	}
 
@@ -210,8 +208,6 @@ serversLoop:
 		server = net.JoinHostPort(serverHost, dnsConfig.Port)
 		b.Trace("Trying DNS server", "addr", server)
 
-		var err error
-
 		m := new(dns.Msg)
 		// By default this sets the flag to ask whatever server is configured to recurse for us. We could manually recurse, either continually against the system server (thus using its cache), or from the root servers down. However both are a huge amount of work for no gain
 		m.SetQuestion(revIp, dns.TypePTR)
@@ -227,12 +223,12 @@ serversLoop:
 			break serversLoop
 		}
 
-		if len(in.Answer) == 0 {
-			b.PrintWarn("NXDOMAIN")
-		}
+		//assert(len(in.Answer) == 0)
+		b.PrintInfo(fmt.Sprintf("%s: NXDOMAIN", s.Addr(ip.String()))) // Info-level cause reverse DNS is never set up properly
+		return []string{}
 	}
-	if len(answers) == 0 {
-		b.PrintWarn("All DNS servers returned no answers or failed.")
+	if err != nil {
+		b.PrintWarn("All DNS servers failed.")
 		return []string{}
 	}
 
