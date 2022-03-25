@@ -12,20 +12,20 @@ import (
 )
 
 // DNSInfo prints detailed results from forward and reverse zone resolution of the given address. addr can be either a hostname or an IPv4/6
-func DNSInfo(s output.TtyStyler, b output.Bios, addr string) {
+func DNSInfo(s output.TtyStyler, b output.Bios, timeout time.Duration, addr string) {
 	ip := net.ParseIP(addr)
 	if ip == nil {
-		ips, fqdn := queryDNS(s, b, addr)
+		ips, fqdn := queryDNS(s, b, timeout, addr)
 		for _, ip := range ips {
-			revNames := queryRevDNS(s, b, ip)
+			revNames := queryRevDNS(s, b, timeout, ip)
 			if len(revNames) > 0 {
 				checkDNSConsistent(s, b, fqdn, revNames)
 			}
 		}
 	} else {
-		names := queryRevDNS(s, b, ip)
+		names := queryRevDNS(s, b, timeout, ip)
 		for _, name := range names {
-			ips, _ := queryDNS(s, b, name)
+			ips, _ := queryDNS(s, b, timeout, name)
 			if len(ips) > 0 {
 				checkRevDNSConsistent(s, b, ip, ips)
 			}
@@ -39,7 +39,7 @@ func DNSInfo(s output.TtyStyler, b output.Bios, addr string) {
 * - localhost is in Files
 * - google.com has ipv6 & v4
  */
-func queryDNS(s output.TtyStyler, b output.Bios, name string) ([]net.IP, string) {
+func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, name string) ([]net.IP, string) {
 
 	/* TODO: be clear that this is just printing info.
 	 * - This only looks in DNS, like say nslookup does.
@@ -56,7 +56,7 @@ func queryDNS(s output.TtyStyler, b output.Bios, name string) ([]net.IP, string)
 	names := dnsConfig.NameList(name)
 
 	c := dns.Client{
-		Dialer: &net.Dialer{Timeout: 5 * time.Second},
+		Dialer: &net.Dialer{Timeout: timeout},
 	}
 
 	var server string
@@ -187,7 +187,7 @@ func printCnameChain(s output.TtyStyler, b output.Bios, question string, answers
 	return as
 }
 
-func queryRevDNS(s output.TtyStyler, b output.Bios, ip net.IP) []string {
+func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip net.IP) []string {
 
 	revIP, err := dns.ReverseAddr(ip.String())
 	b.CheckErr(err)
@@ -198,7 +198,7 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, ip net.IP) []string {
 	b.CheckErr(err)
 
 	c := dns.Client{
-		Dialer: &net.Dialer{Timeout: 5 * time.Second},
+		Dialer: &net.Dialer{Timeout: timeout},
 	}
 
 	var server string

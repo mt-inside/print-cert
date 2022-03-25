@@ -17,11 +17,7 @@ import (
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
-/* TODO:
-* - single, configurable timeout for all network operations
- */
-
-func getCheckRedirect(s output.TtyStyler, b output.Bios, c *http.Client) func(*http.Request, []*http.Request) error {
+func getCheckRedirect(s output.TtyStyler, b output.Bios, timeout time.Duration, c *http.Client) func(*http.Request, []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
 		b.Banner("Redirect")
 
@@ -33,7 +29,7 @@ func getCheckRedirect(s output.TtyStyler, b output.Bios, c *http.Client) func(*h
 		b.Trace("Updating HTTP request", "Host", req.URL.Host)
 		req.Host = req.URL.Host
 
-		DNSInfo(s, b, req.URL.Host)
+		DNSInfo(s, b, timeout, req.URL.Host)
 
 		fmt.Println()
 
@@ -45,13 +41,13 @@ func getCheckRedirect(s output.TtyStyler, b output.Bios, c *http.Client) func(*h
 
 // GetPlaintextClient returns an HTTP Client for calling non-TLS endpoints.
 // It prints lots of info along the way.
-func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
+func GetPlaintextClient(s output.TtyStyler, b output.Bios, timeout time.Duration) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				dialer := &net.Dialer{
-					Timeout:   5 * time.Second,
-					KeepAlive: 30 * time.Second,
+					Timeout:   timeout,
+					KeepAlive: 60 * time.Second,
 					// Note: happens "after creating the network connection but before actually dialing."
 					Control: func(network, address string, rawConn syscall.RawConn) error {
 						b.Banner("TCP")
@@ -67,19 +63,19 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
 
 				return conn, err
 			},
-			ResponseHeaderTimeout: 5 * time.Second,
+			ResponseHeaderTimeout: timeout,
 			DisableCompression:    true,
 		},
 	}
 
-	c.CheckRedirect = getCheckRedirect(s, b, c)
+	c.CheckRedirect = getCheckRedirect(s, b, timeout, c)
 
 	return c
 }
 
 // GetTLSClient returns an HTTP Client for calling TLS-enabled endpoints.
 // It prints lots of info along the way.
-func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyPath string, krb, http11 bool) *http.Client {
+func GetTLSClient(s output.TtyStyler, b output.Bios, timeout time.Duration, sni, caPath, certPath, keyPath string, krb, http11 bool) *http.Client {
 
 	// Always make a krb transport, becuase if we make a plain HTTP one and try to wrap it later, we have to copy the bytes (because spnego.Transport embeds http.Transport) and that copies a sync.Mutex.
 	tr := &spnego.Transport{
@@ -87,8 +83,8 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyP
 		Transport: http.Transport{
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				dialer := &net.Dialer{
-					Timeout:   5 * time.Second,
-					KeepAlive: 30 * time.Second,
+					Timeout:   timeout,
+					KeepAlive: 60 * time.Second,
 					// Note: happens "after creating the network connection but before actually dialing."
 					Control: func(network, address string, rawConn syscall.RawConn) error {
 						b.Banner("TCP")
@@ -104,8 +100,8 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyP
 
 				return conn, err
 			},
-			TLSHandshakeTimeout:   5 * time.Second, // assume this is just the TLS handshake ie tcp handshake is covered by the dialer
-			ResponseHeaderTimeout: 5 * time.Second,
+			TLSHandshakeTimeout:   timeout, // assume this is just the TLS handshake ie tcp handshake is covered by the dialer
+			ResponseHeaderTimeout: timeout,
 			DisableCompression:    true,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true, // deliberate, qv
@@ -213,15 +209,15 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, sni, caPath, certPath, keyP
 	}
 
 	// Really ugly that this can't be set in the literal (so that it can reference and reach into the client and mutate it)
-	c.CheckRedirect = getCheckRedirect(s, b, c)
+	c.CheckRedirect = getCheckRedirect(s, b, timeout, c)
 
 	return c
 }
 
 // GetHTTPRequest returns an HTTP Request that can be used to call endpoints under test.
-func GetHTTPRequest(s output.TtyStyler, b output.Bios, scheme, addr, port, host, path string) (*http.Request, context.CancelFunc) {
+func GetHTTPRequest(s output.TtyStyler, b output.Bios, timeout time.Duration, scheme, addr, port, host, path string) (*http.Request, context.CancelFunc) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 
 	addrPort := net.JoinHostPort(addr, port)
 	hostPort := net.JoinHostPort(host, port)
