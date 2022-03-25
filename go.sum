@@ -178,8 +178,8 @@ github.com/mitchellh/mapstructure v1.4.3 h1:OVowDSCllw/YjdLkam3/sm7wEtOy59d8ndGg
 github.com/mitchellh/mapstructure v1.4.3/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/mt-inside/go-usvc v0.0.4 h1:vqV3goR8MQwsioVMstMPTtwZVV4P0n6zhXYfzapSpOQ=
 github.com/mt-inside/go-usvc v0.0.4/go.mod h1:vByX1w+t5I/jKeH6UnYkdc3u54gwItIPwstQK09ipn0=
-github.com/mt-inside/http-log v0.0.0-20220323162902-6f29756ae159 h1:pHqdou2YbXZO8AaBPi9TafxCCLUoViPmD5ZGxiFoo0M=
-github.com/mt-inside/http-log v0.0.0-20220323162902-6f29756ae159/go.mod h1:551QKkylDvnkUL33TGBa174hSmogFI+acXsQVbYgXH8=
+github.com/mt-inside/http-log v0.0.0-20220324152647-5bcb35becf3e h1:vcTFIESESY0207VFfONyokBroiaJdNQ89zk1Pj0Bfns=
+github.com/mt-inside/http-log v0.0.0-20220324152647-5bcb35becf3e/go.mod h1:Ve6dmRy5ZM5ZxeY8DgunRIi9DVkpecA3bM/+PE3vwLs=
 github.com/pelletier/go-toml v1.9.4 h1:tjENF6MfZAg8e4ZmZTeWaWiT2vXtsoO6+iuOjFhECwM=
 github.com/pelletier/go-toml v1.9.4/go.mod h1:u1nR/EPcESfeI/szUZKdtJ0xRNbUoANCkoOuaOx1Y+c=
 github.com/peterzen/goresolver v1.0.2 h1:UxRxk835Onz7Go4oPUsOptSmBlIvN/yJ2kv3Srr3hw4=
