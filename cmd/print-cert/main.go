@@ -17,7 +17,6 @@ import (
 
 /* TODO
 * - show dane and other stati of name
-* - take option to enable DNS info printing (default off)
  */
 
 func init() {
@@ -40,6 +39,7 @@ func main() {
 	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate file")
 	cmd.Flags().StringP("key", "k", "", "Path to TLS client key file")
 	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
+	cmd.Flags().BoolP("show-dns", "d", false, "Show detailed DNS testing for the given addr (note: this is just indicative; the system resolver is used to make the actual connection)")
 	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
 	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
 	cmd.Flags().DurationP("timeout", "t", 5*time.Second, "Timeout for each individual network operation")
@@ -66,9 +66,9 @@ func appMain(cmd *cobra.Command, args []string) {
 		b.CheckErr(fmt.Errorf("Unknown scheme: %s", scheme))
 	}
 
-	b.Banner("DNS (information only)")
-
-	probes.DNSInfo(s, b, viper.GetDuration("timeout"), addr)
+	if viper.GetBool("show-dns") {
+		probes.DNSInfo(s, b, viper.GetDuration("timeout"), addr)
+	}
 
 	host := viper.GetString("host")
 	if host == "" {
