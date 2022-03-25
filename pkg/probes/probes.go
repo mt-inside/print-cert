@@ -283,7 +283,7 @@ func CheckRevDnsConsistent(s output.TtyStyler, b output.Bios, orig net.IP, revs 
 			return
 		}
 	}
-	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s\n", s.Addr(orig.String()), s.List(output.IPs2Strings(revs), s.AddrStyle)))
+	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s\n", s.Addr(orig.String()), s.List(output.Slice2Strings(revs), s.AddrStyle)))
 }
 
 func GetPlaintextClient(s output.TtyStyler, b output.Bios) *http.Client {
