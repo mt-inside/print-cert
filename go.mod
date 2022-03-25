@@ -9,7 +9,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/logrusorgru/aurora/v3 v3.0.0
 	github.com/miekg/dns v1.1.47
-	github.com/mt-inside/http-log v0.0.0-20220323162902-6f29756ae159
+	github.com/mt-inside/http-log v0.0.0-20220324152647-5bcb35becf3e
 	github.com/peterzen/goresolver v1.0.2
 	github.com/sergi/go-diff v1.2.0
 	github.com/spf13/cobra v1.4.0
