@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"time"
+	"unicode/utf8"
 
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/mt-inside/http-log/pkg/output"
@@ -114,8 +115,11 @@ func appMain(cmd *cobra.Command, args []string) {
 		fmt.Println(string(nsBody))
 	}
 
+	if !utf8.Valid(f5Body) || !utf8.Valid(nsBody) {
+		b.PrintWarn("one or more response bodies aren't valid utf-8; diff engine might do unexpected things")
+	}
 	differ := dmp.New()
-	diffs := differ.DiffMain(string(f5Body), string(nsBody), true) // TODO try-decode as utf8
+	diffs := differ.DiffMain(string(f5Body), string(nsBody), true)
 
 	if !(len(diffs) == 1 && diffs[0].Type == dmp.DiffEqual) {
 		b.PrintErr("response bodies differ")
