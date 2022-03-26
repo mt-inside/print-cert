@@ -149,9 +149,8 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, timeout time.Duration, sni,
 					b.Banner("TLS")
 
 					fmt.Printf("%s handshake complete\n", s.Noun(output.TLSVersionName(cs.Version)))
-					fmt.Printf("\tCypher suite %s\n", s.Noun(tls.CipherSuiteName(cs.CipherSuite)))
-
-					// TODO this ^^ is the agreed-upon symmetic scheme? Print the key-exchange also used to get it - DH or ECDH. Already printing the signature scheme (RSA, ECDSA, etc) when we print certs
+					fmt.Printf("\tSymmetric cypher suite %s\n", s.Noun(tls.CipherSuiteName(cs.CipherSuite)))
+					// Would be nice to print the key exchange algo used but it's not available to us, and indeed all the code relating to it is non-exported from golang's crypto package
 					fmt.Printf("\tALPN proto %s\n", s.OptionalString(cs.NegotiatedProtocol, s.NounStyle))
 					fmt.Printf("\tOCSP info stapled to response? %s\n", s.YesNo(len(cs.OCSPResponse) > 0))
 					fmt.Println()
