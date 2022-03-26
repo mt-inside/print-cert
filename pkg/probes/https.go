@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/MarshallWace/go-spnego"
 	"github.com/mt-inside/http-log/pkg/output"
@@ -304,6 +305,8 @@ func CheckTLS(s output.TtyStyler, b output.Bios, client *http.Client, req *http.
 	rawBody, err := ioutil.ReadAll(resp.Body)
 	b.CheckErr(err)
 	fmt.Printf("\tactual %s bytes of body read\n", s.Bright(strconv.FormatInt(int64(len(rawBody)), 10)))
+
+	fmt.Printf("\tvalid utf-8? %s\n", s.YesNo(utf8.Valid(rawBody)))
 
 	return rawBody
 }
