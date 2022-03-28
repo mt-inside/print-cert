@@ -10,11 +10,13 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 	"unicode/utf8"
 
 	"github.com/MarshallWace/go-spnego"
+	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
@@ -120,17 +122,19 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, timeout time.Duration, sni,
 					pair, err := tls.LoadX509KeyPair(certPath, keyPath)
 					b.CheckErr(err)
 
-					/* Parse */
+					// TODO: factor out to function - takes tls.Certificate, parses as x509/Certificate and prints info. Use
+					// - here
+					// - http-log showing what it's serving in main.go
+					// - http-log showing what it's verifying JWTs with (need sister method ParseAndRenderPublicKey())
+					/* Parse + Print info */
 					var certs []*x509.Certificate
 					for _, bytes := range pair.Certificate {
 						cert, err := x509.ParseCertificate(bytes)
 						b.CheckErr(err)
 						certs = append(certs, cert)
 					}
-
-					/* Print */
 					fmt.Println("Presenting client cert chain")
-					s.ClientCertChain(certs)
+					s.ClientCertChain(certs, nil)
 
 					/* Hand to http client */
 					return &pair, err
@@ -162,35 +166,16 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, timeout time.Duration, sni,
 					// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
 					// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
 					// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
-					opts := x509.VerifyOptions{
-						DNSName:       cs.ServerName,
-						Intermediates: x509.NewCertPool(),
-					}
+					// TODO load and parse caPath early, to fail early. Then just use caCert blibdly here - if it's nil (becase there was no caPath), ServingCertChainVerified() will use system roots to verify
 					if caPath != "" {
 						bytes, err := ioutil.ReadFile(caPath)
 						b.CheckErr(err)
-
-						roots := x509.NewCertPool()
-						ok := roots.AppendCertsFromPEM(bytes)
-						b.CheckOk(ok)
-						opts.Roots = roots
-					}
-					for _, cert := range cs.PeerCertificates[1:] {
-						opts.Intermediates.AddCert(cert)
-					}
-
-					chains, err := cs.PeerCertificates[0].Verify(opts)
-					if err != nil {
-						s.ServingCertChain(&cs.ServerName, nil, cs.PeerCertificates, nil)
-						fmt.Println()
+						caCert, err := codec.ParseCertificate(bytes)
+						b.CheckErr(err)
+						s.ServingCertChainVerified(cs.ServerName, cs.PeerCertificates, caCert)
 					} else {
-						for _, chain := range chains {
-							s.ServingCertChain(&cs.ServerName, nil, cs.PeerCertificates, chain)
-							fmt.Println()
-						}
+						s.ServingCertChainVerified(cs.ServerName, cs.PeerCertificates, nil)
 					}
-
-					fmt.Println("\tCert valid?", s.YesError(err))
 					fmt.Println()
 
 					return nil
@@ -241,6 +226,10 @@ func GetHTTPRequest(s output.TtyStyler, b output.Bios, timeout time.Duration, sc
 	} else {
 		req.Host = hostPort
 	}
+
+	// FIXME. Shouldn't handle JTW first-class here; just add a flag for user to be able to pass arbitrary headers
+	jwt, _ := ioutil.ReadFile("/Users/matt/work/personal/talks/istio-demo-master/42-jwt-pki/one.jwt")
+	req.Header.Add("authorization", fmt.Sprintf("Bearer %s", strings.TrimSpace(string(jwt))))
 
 	return req, cancel
 }
