@@ -32,17 +32,23 @@ func main() {
 		Run:  appMain,
 	}
 
+	/* Request */
 	cmd.Flags().StringP("sni", "s", "", "SNI ServerName")
 	cmd.Flags().StringP("host", "a", "", "HTTP Host / :authority header")
 	cmd.Flags().StringP("path", "p", "/", "HTTP path to request")
-	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA file")
-	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate file")
-	cmd.Flags().StringP("key", "k", "", "Path to TLS client key file")
-	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
+	cmd.Flags().DurationP("timeout", "t", 5*time.Second, "Timeout for each individual network operation")
+	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
+
+	/* Output */
 	cmd.Flags().BoolP("show-dns", "d", false, "Show detailed DNS testing for the given addr (note: this is just indicative; the system resolver is used to make the actual connection)")
 	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
-	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
-	cmd.Flags().DurationP("timeout", "t", 5*time.Second, "Timeout for each individual network operation")
+
+	/* TLS and auth */
+	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate")
+	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate")
+	cmd.Flags().StringP("key", "k", "", "Path to TLS client key")
+	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
+
 	err := viper.BindPFlags(cmd.Flags())
 	if err != nil {
 		panic(errors.New("Can't set up flags"))
@@ -79,6 +85,7 @@ func appMain(cmd *cobra.Command, args []string) {
 		sni = host
 	}
 
+	// TODO: try to load and parse all the certs and keys here (codec.ParsePublicKey/codec.ParseCertificate) - should fail early if those args are invalid
 	var client *http.Client
 	switch scheme {
 	case "http":
