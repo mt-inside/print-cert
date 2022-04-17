@@ -51,12 +51,12 @@ func main() {
 
 	err := viper.BindPFlags(cmd.Flags())
 	if err != nil {
-		panic(errors.New("Can't set up flags"))
+		panic(errors.New("can't set up flags"))
 	}
 
 	err = cmd.Execute()
 	if err != nil {
-		fmt.Println("Error during execution:", err)
+		fmt.Println("error during execution:", err)
 	}
 }
 
@@ -69,7 +69,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	port := args[1]
 	scheme := args[2]
 	if !(scheme == "http" || scheme == "https") {
-		b.CheckErr(fmt.Errorf("Unknown scheme: %s", scheme))
+		b.CheckErr(fmt.Errorf("unknown scheme: %s", scheme))
 	}
 
 	if viper.GetBool("show-dns") {

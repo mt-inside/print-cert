@@ -31,12 +31,12 @@ func main() {
 	cmd.Flags().DurationP("timeout", "t", 5*time.Second, "Timeout for each individual network operation")
 	err := viper.BindPFlags(cmd.Flags())
 	if err != nil {
-		panic(errors.New("Can't set up flags"))
+		panic(errors.New("can't set up flags"))
 	}
 
 	err = cmd.Execute()
 	if err != nil {
-		fmt.Println("Error during execution:", err)
+		fmt.Println("error during execution:", err)
 	}
 }
 
@@ -52,10 +52,10 @@ func appMain(cmd *cobra.Command, args []string) {
 	scheme := args[4]
 
 	if nsIP == nil {
-		b.CheckErr(fmt.Errorf("Invalid IP: %s", args[2]))
+		b.CheckErr(fmt.Errorf("invalid IP: %s", args[2]))
 	}
 	if !(scheme == "http" || scheme == "https") {
-		b.CheckErr(fmt.Errorf("Unknown scheme: %s", scheme))
+		b.CheckErr(fmt.Errorf("unknown scheme: %s", scheme))
 	}
 
 	fmt.Printf("Testing NetScaler VIP %v against F5 service %v\n", s.Addr(nsIP.String()), s.Addr(f5Host))
