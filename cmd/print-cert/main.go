@@ -1,14 +1,18 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/logrusorgru/aurora/v3"
+	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/print-cert/pkg/probes"
 	"github.com/spf13/cobra"
@@ -85,13 +89,30 @@ func appMain(cmd *cobra.Command, args []string) {
 		sni = host
 	}
 
-	// TODO: try to load and parse all the certs and keys here (codec.ParsePublicKey/codec.ParseCertificate) - should fail early if those args are invalid
+	/* Load TLS material */
+
+	var clientPair *tls.Certificate
+	if viper.Get("cert") != "" || viper.Get("key") != "" {
+		pair, err := tls.LoadX509KeyPair(viper.Get("cert").(string), viper.Get("key").(string))
+		b.CheckErr(err)
+		clientPair = &pair
+	}
+
+	var servingCA *x509.Certificate
+	if viper.Get("ca") != "" {
+		bytes, err := ioutil.ReadFile(viper.Get("ca").(string))
+		b.CheckErr(err)
+		servingCA, err = codec.ParseCertificate(bytes)
+		b.CheckErr(err)
+	}
+
 	var client *http.Client
 	switch scheme {
 	case "http":
 		client = probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
 	case "https":
-		client = probes.GetTLSClient(s, b, viper.GetDuration("timeout"), sni, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http-11"))
+		// it's ok to pass nil servingCA and/or clientPair
+		client = probes.GetTLSClient(s, b, viper.GetDuration("timeout"), sni, servingCA, clientPair, viper.GetBool("kerberos"), viper.GetBool("http-11"))
 	}
 
 	req, cancel := probes.GetHTTPRequest(s, b, viper.GetDuration("timeout"), scheme, addr, port, host, viper.GetString("path"))

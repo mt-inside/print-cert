@@ -78,7 +78,13 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios, timeout time.Duration
 
 // GetTLSClient returns an HTTP Client for calling TLS-enabled endpoints.
 // It prints lots of info along the way.
-func GetTLSClient(s output.TtyStyler, b output.Bios, timeout time.Duration, sni, caPath, certPath, keyPath string, krb, http11 bool) *http.Client {
+func GetTLSClient(
+	s output.TtyStyler, b output.Bios,
+	timeout time.Duration,
+	sni string,
+	servingCA *x509.Certificate, clientCert *tls.Certificate,
+	krb, http11 bool,
+) *http.Client {
 
 	// Always make a krb transport, becuase if we make a plain HTTP one and try to wrap it later, we have to copy the bytes (because spnego.Transport embeds http.Transport) and that copies a sync.Mutex.
 	tr := &spnego.Transport{
@@ -113,31 +119,16 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, timeout time.Duration, sni,
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 					b.Trace("Asked for a TLS client certificate")
 
-					if certPath == "" || keyPath == "" {
+					if clientCert == nil {
 						b.PrintWarn("Asked to present a client cert but none configured (-c/-k). Not presenting a cert, this might cause the server to abort the handshake.")
 						return &tls.Certificate{}, nil
 					}
 
-					/* Load from disk */
-					pair, err := tls.LoadX509KeyPair(certPath, keyPath)
-					b.CheckErr(err)
-
-					// TODO: factor out to function - takes tls.Certificate, parses as x509/Certificate and prints info. Use
-					// - here
-					// - http-log showing what it's serving in main.go
-					// - http-log showing what it's verifying JWTs with (need sister method ParseAndRenderPublicKey())
-					/* Parse + Print info */
-					var certs []*x509.Certificate
-					for _, bytes := range pair.Certificate {
-						cert, err := x509.ParseCertificate(bytes)
-						b.CheckErr(err)
-						certs = append(certs, cert)
-					}
 					fmt.Println("Presenting client cert chain")
-					s.ClientCertChain(certs, nil)
+					// TODO: verbose mode only
+					s.ClientCertChain(codec.ChainFromCertificate(clientCert), nil)
 
-					/* Hand to http client */
-					return &pair, err
+					return clientCert, nil
 				},
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 					b.Trace("Hook: TLS built-in cert verification finished (no-op in our config)")
@@ -166,16 +157,8 @@ func GetTLSClient(s output.TtyStyler, b output.Bios, timeout time.Duration, sni,
 					// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
 					// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
 					// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
-					// TODO load and parse caPath early, to fail early. Then just use caCert blibdly here - if it's nil (becase there was no caPath), ServingCertChainVerified() will use system roots to verify
-					if caPath != "" {
-						bytes, err := ioutil.ReadFile(caPath)
-						b.CheckErr(err)
-						caCert, err := codec.ParseCertificate(bytes)
-						b.CheckErr(err)
-						s.ServingCertChainVerified(cs.ServerName, cs.PeerCertificates, caCert)
-					} else {
-						s.ServingCertChainVerified(cs.ServerName, cs.PeerCertificates, nil)
-					}
+					// If caCert is nil ServingCertChainVerified() will use system roots to verify
+					s.ServingCertChainVerified(cs.ServerName, cs.PeerCertificates, servingCA)
 					fmt.Println()
 
 					return nil
