@@ -112,10 +112,20 @@ func appMain(cmd *cobra.Command, args []string) {
 		client = probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
 	case "https":
 		// it's ok to pass nil servingCA and/or clientPair
-		client = probes.GetTLSClient(s, b, viper.GetDuration("timeout"), sni, servingCA, clientPair, viper.GetBool("kerberos"), viper.GetBool("http-11"))
+		client = probes.GetTLSClient(
+			s, b,
+			viper.GetDuration("timeout"),
+			sni,
+			servingCA, clientPair,
+			viper.GetBool("kerberos"), viper.GetBool("http-11"),
+		)
 	}
 
-	req, cancel := probes.GetHTTPRequest(s, b, viper.GetDuration("timeout"), scheme, addr, port, host, viper.GetString("path"))
+	req, cancel := probes.GetHTTPRequest(
+		s, b,
+		viper.GetDuration("timeout"),
+		scheme, addr, port, host, viper.GetString("path"),
+	)
 	defer cancel()
 
 	rawBody := probes.CheckTLS(
