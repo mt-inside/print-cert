@@ -81,21 +81,13 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	fmt.Printf("Testing new IP %v against reference host %v\n", s.Addr(newIp.String()), s.Addr(refName))
 
-	/* Check DNS */
-
-	b.Banner("DNS")
-
-	probes.DNSInfo(s, b, viper.GetDuration("timeout"), refName)
-
-	probes.DNSInfo(s, b, viper.GetDuration("timeout"), newIp.String())
-
-	//do for base and new. For new, don't rely on the dns so use refName
-
 	/* Check reference */
 
 	b.Banner("Reference host")
-	var refBody []byte
 
+	probes.DNSInfo(s, b, viper.GetDuration("timeout"), refName)
+
+	var refBody []byte
 	switch scheme {
 	case "http":
 		client := probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
@@ -126,8 +118,10 @@ func appMain(cmd *cobra.Command, args []string) {
 	/* Check new */
 
 	b.Banner("New IP")
-	var newBody []byte
 
+	probes.DNSInfo(s, b, viper.GetDuration("timeout"), newIp.String())
+
+	var newBody []byte
 	switch scheme {
 	case "http":
 		client := probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
