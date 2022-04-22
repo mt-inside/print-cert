@@ -23,7 +23,7 @@ import (
 func main() {
 
 	cmd := &cobra.Command{
-		Use:  "f5Name f5Port nsIP f5Port scheme",
+		Use:  "reference-dns-name reference-port new-ip new-port scheme",
 		Args: cobra.ExactArgs(5),
 		Run:  appMain,
 	}
@@ -49,13 +49,13 @@ func appMain(cmd *cobra.Command, args []string) {
 	s := output.NewTtyStyler(aurora.NewAurora(true))
 	b := output.NewTtyBios(s)
 
-	f5Host := args[0]
-	f5Port := args[1]
-	nsIP := net.ParseIP(args[2])
-	nsPort := args[3]
+	refName := args[0]
+	refPort := args[1]
+	newIp := net.ParseIP(args[2])
+	newPort := args[3]
 	scheme := args[4]
 
-	if nsIP == nil {
+	if newIp == nil {
 		b.CheckErr(fmt.Errorf("invalid IP: %s", args[2]))
 	}
 	if !(scheme == "http" || scheme == "https") {
@@ -79,22 +79,22 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	/* Begin */
 
-	fmt.Printf("Testing NetScaler VIP %v against F5 service %v\n", s.Addr(nsIP.String()), s.Addr(f5Host))
+	fmt.Printf("Testing new IP %v against reference host %v\n", s.Addr(newIp.String()), s.Addr(refName))
 
 	/* Check DNS */
 
 	b.Banner("DNS")
 
-	probes.DNSInfo(s, b, viper.GetDuration("timeout"), f5Host)
+	probes.DNSInfo(s, b, viper.GetDuration("timeout"), refName)
 
-	probes.DNSInfo(s, b, viper.GetDuration("timeout"), nsIP.String())
+	probes.DNSInfo(s, b, viper.GetDuration("timeout"), newIp.String())
 
-	//do for f5 and ns. For ns, don't rely on the dns so use f5host
+	//do for base and new. For new, don't rely on the dns so use refName
 
-	/* Check F5 */
+	/* Check reference */
 
-	b.Banner("Existing F5")
-	var f5Body []byte
+	b.Banner("Reference host")
+	var refBody []byte
 
 	switch scheme {
 	case "http":
@@ -102,31 +102,31 @@ func appMain(cmd *cobra.Command, args []string) {
 		req, cancel := probes.GetHTTPRequest(
 			s, b,
 			viper.GetDuration("timeout"),
-			scheme, f5Host, f5Port, f5Host, viper.GetString("path"),
+			scheme, refName, refPort, refName, viper.GetString("path"),
 		)
 		defer cancel()
-		f5Body = probes.CheckTLS(s, b, client, req)
+		refBody = probes.CheckTLS(s, b, client, req)
 	case "https":
 		client := probes.GetTLSClient(
 			s, b,
 			viper.GetDuration("timeout"),
-			f5Host,
+			refName,
 			servingCA, clientPair,
 			viper.GetBool("kerberos"), viper.GetBool("http11"),
 		)
 		req, cancel := probes.GetHTTPRequest(
 			s, b,
 			viper.GetDuration("timeout"),
-			scheme, f5Host, f5Port, f5Host, viper.GetString("path"),
+			scheme, refName, refPort, refName, viper.GetString("path"),
 		)
 		defer cancel()
-		f5Body = probes.CheckTLS(s, b, client, req)
+		refBody = probes.CheckTLS(s, b, client, req)
 	}
 
-	/* Check NetScaler */
+	/* Check new */
 
-	b.Banner("New NetScaler")
-	var nsBody []byte
+	b.Banner("New IP")
+	var newBody []byte
 
 	switch scheme {
 	case "http":
@@ -134,25 +134,25 @@ func appMain(cmd *cobra.Command, args []string) {
 		req, cancel := probes.GetHTTPRequest(
 			s, b,
 			viper.GetDuration("timeout"),
-			scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"),
+			scheme, newIp.String(), newPort, refName, viper.GetString("path"),
 		)
 		defer cancel()
-		nsBody = probes.CheckTLS(s, b, client, req)
+		newBody = probes.CheckTLS(s, b, client, req)
 	case "https":
 		client := probes.GetTLSClient(
 			s, b,
 			viper.GetDuration("timeout"),
-			f5Host,
+			refName,
 			servingCA, clientPair,
 			viper.GetBool("kerberos"), viper.GetBool("http11"),
 		)
 		req, cancel := probes.GetHTTPRequest(
 			s, b,
 			viper.GetDuration("timeout"),
-			scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"),
+			scheme, newIp.String(), newPort, refName, viper.GetString("path"),
 		)
 		defer cancel()
-		nsBody = probes.CheckTLS(s, b, client, req)
+		newBody = probes.CheckTLS(s, b, client, req)
 	}
 
 	/* Body diff */
@@ -160,15 +160,15 @@ func appMain(cmd *cobra.Command, args []string) {
 	b.Banner("Differences")
 
 	if viper.GetBool("print-body") {
-		fmt.Println("NETSCALER response body:")
-		fmt.Println(string(nsBody))
+		fmt.Println("NEW response body:")
+		fmt.Println(string(newBody))
 	}
 
-	if !utf8.Valid(f5Body) || !utf8.Valid(nsBody) {
+	if !utf8.Valid(refBody) || !utf8.Valid(newBody) {
 		b.PrintWarn("one or more response bodies aren't valid utf-8; diff engine might do unexpected things")
 	}
 	differ := dmp.New()
-	diffs := differ.DiffMain(string(f5Body), string(nsBody), true)
+	diffs := differ.DiffMain(string(refBody), string(newBody), true)
 
 	if !(len(diffs) == 1 && diffs[0].Type == dmp.DiffEqual) {
 		b.PrintWarn("response bodies differ")
