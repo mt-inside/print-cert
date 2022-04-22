@@ -1,14 +1,18 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"time"
 	"unicode/utf8"
 
 	"github.com/logrusorgru/aurora/v3"
+	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/print-cert/pkg/probes"
 	dmp "github.com/sergi/go-diff/diffmatchpatch"
@@ -58,6 +62,23 @@ func appMain(cmd *cobra.Command, args []string) {
 		b.CheckErr(fmt.Errorf("unknown scheme: %s", scheme))
 	}
 
+	var clientPair *tls.Certificate
+	if viper.Get("cert") != "" || viper.Get("key") != "" {
+		pair, err := tls.LoadX509KeyPair(viper.Get("cert").(string), viper.Get("key").(string))
+		b.CheckErr(err)
+		clientPair = &pair
+	}
+
+	var servingCA *x509.Certificate
+	if viper.Get("ca") != "" {
+		bytes, err := ioutil.ReadFile(viper.Get("ca").(string))
+		b.CheckErr(err)
+		servingCA, err = codec.ParseCertificate(bytes)
+		b.CheckErr(err)
+	}
+
+	/* Begin */
+
 	fmt.Printf("Testing NetScaler VIP %v against F5 service %v\n", s.Addr(nsIP.String()), s.Addr(f5Host))
 
 	/* Check DNS */
@@ -78,12 +99,26 @@ func appMain(cmd *cobra.Command, args []string) {
 	switch scheme {
 	case "http":
 		client := probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
-		req, cancel := probes.GetHTTPRequest(s, b, viper.GetDuration("timeout"), scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
+		req, cancel := probes.GetHTTPRequest(
+			s, b,
+			viper.GetDuration("timeout"),
+			scheme, f5Host, f5Port, f5Host, viper.GetString("path"),
+		)
 		defer cancel()
 		f5Body = probes.CheckTLS(s, b, client, req)
 	case "https":
-		client := probes.GetTLSClient(s, b, viper.GetDuration("timeout"), f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
-		req, cancel := probes.GetHTTPRequest(s, b, viper.GetDuration("timeout"), scheme, f5Host, f5Port, f5Host, viper.GetString("path"))
+		client := probes.GetTLSClient(
+			s, b,
+			viper.GetDuration("timeout"),
+			f5Host,
+			servingCA, clientPair,
+			viper.GetBool("kerberos"), viper.GetBool("http11"),
+		)
+		req, cancel := probes.GetHTTPRequest(
+			s, b,
+			viper.GetDuration("timeout"),
+			scheme, f5Host, f5Port, f5Host, viper.GetString("path"),
+		)
 		defer cancel()
 		f5Body = probes.CheckTLS(s, b, client, req)
 	}
@@ -96,12 +131,26 @@ func appMain(cmd *cobra.Command, args []string) {
 	switch scheme {
 	case "http":
 		client := probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
-		req, cancel := probes.GetHTTPRequest(s, b, viper.GetDuration("timeout"), scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"))
+		req, cancel := probes.GetHTTPRequest(
+			s, b,
+			viper.GetDuration("timeout"),
+			scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"),
+		)
 		defer cancel()
 		nsBody = probes.CheckTLS(s, b, client, req)
 	case "https":
-		client := probes.GetTLSClient(s, b, viper.GetDuration("timeout"), f5Host, viper.GetString("ca"), viper.GetString("cert"), viper.GetString("key"), viper.GetBool("kerberos"), viper.GetBool("http11"))
-		req, cancel := probes.GetHTTPRequest(s, b, viper.GetDuration("timeout"), scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"))
+		client := probes.GetTLSClient(
+			s, b,
+			viper.GetDuration("timeout"),
+			f5Host,
+			servingCA, clientPair,
+			viper.GetBool("kerberos"), viper.GetBool("http11"),
+		)
+		req, cancel := probes.GetHTTPRequest(
+			s, b,
+			viper.GetDuration("timeout"),
+			scheme, nsIP.String(), nsPort, f5Host, viper.GetString("path"),
+		)
 		defer cancel()
 		nsBody = probes.CheckTLS(s, b, client, req)
 	}
