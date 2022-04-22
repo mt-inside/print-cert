@@ -19,7 +19,7 @@ print-cert-full *ARGS: lint
 	go run ./cmd/print-cert -k=ssl/client-key.pem -c=ssl/client-cert.pem -C=ssl/server-ca-cert.pem -s example.com {{ARGS}} localhost 8080 https
 
 compare *ARGS: lint
-	go run ./cmd/single-ip {{ARGS}} localhost 8080 127.0.0.1 8443 https
+	go run ./cmd/compare {{ARGS}} localhost 8080 127.0.0.1 8443 https
 
 nginx-build:
 	docker build -t nginx-mutual nginx
