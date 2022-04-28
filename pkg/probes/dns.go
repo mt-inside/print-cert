@@ -112,9 +112,9 @@ serversLoop:
 	}
 
 	/* Validate DNSSEC. Options:
-	 * - implement DNSSEC validation manually (using the dns library and doing all the RRSIG, DNSKEY, DS queries right up to the root). This is a massive amount of work
-	 * - use this goresolver library to do that for us (but don't use it for the main queries cause we want more control and visbility)
-	 * - use the system resolver to do it (local stub / router / ISP / whatever) - set the EDNS0 flag in the question and see if the right flag is in the answer
+	 * - 1. implement DNSSEC validation manually (using the dns library and doing all the RRSIG, DNSKEY, DS queries right up to the root). This is a massive amount of work
+	 * - 2. use goresolver library to do that for us (but don't use it for the main queries cause we want more control and visbility)
+	 * - 3. use the system resolver to do it (local stub / router / ISP / whatever) - set the EDNS0 flag in the question and see if the right flag is in the answer
 	 *
 	 * Choice: 2 - goresolver is known to do it properly (recursive resolvers are known to *strip* DNSSEC-related records, let alone not validate them properly).
 	 */
