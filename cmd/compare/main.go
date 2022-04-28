@@ -28,11 +28,26 @@ func main() {
 		Run:  appMain,
 	}
 
+	/* Request */
+	cmd.Flags().StringP("path", "p", "/", "HTTP path to request")
+	cmd.Flags().Duration("timeout", 5*time.Second, "Timeout for each individual network operation")
+	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
+
+	/* Output */
+	cmd.Flags().BoolP("dns", "d", false, "Show detailed DNS testing for the given addr (note: this is just indicative; the system resolver is used to make the actual connection)")
+	cmd.Flags().BoolP("tls", "t", true, "Print important agreed TLS parameters")
+	cmd.Flags().BoolP("tls-full", "T", false, "Print all agreed TLS parameters")
+	cmd.Flags().BoolP("head", "m", true, "Print important HTTP response metadata")
+	cmd.Flags().BoolP("head-full", "M", false, "Print all HTTP response metadata")
+	cmd.Flags().BoolP("body", "b", false, "Print truncated returned HTTP body")
+	cmd.Flags().BoolP("body-full", "B", false, "Print full returned HTTP body")
+
+	/* TLS and auth */
 	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate file")
 	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate file")
 	cmd.Flags().StringP("key", "k", "", "Path to TLS client key file")
-	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
-	cmd.Flags().DurationP("timeout", "t", 5*time.Second, "Timeout for each individual network operation")
+	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
+
 	err := viper.BindPFlags(cmd.Flags())
 	if err != nil {
 		panic(errors.New("can't set up flags"))
@@ -84,78 +99,34 @@ func appMain(cmd *cobra.Command, args []string) {
 	/* Check reference */
 
 	b.Banner("Reference host")
-
-	probes.DNSInfo(s, b, viper.GetDuration("timeout"), refName)
-
-	var refBody []byte
-	switch scheme {
-	case "http":
-		client := probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
-		req, cancel := probes.GetHTTPRequest(
-			s, b,
-			viper.GetDuration("timeout"),
-			scheme, refName, refPort, refName, viper.GetString("path"),
-		)
-		defer cancel()
-		refBody = probes.CheckTLS(s, b, client, req)
-	case "https":
-		client := probes.GetTLSClient(
-			s, b,
-			viper.GetDuration("timeout"),
-			refName,
-			servingCA, clientPair,
-			viper.GetBool("kerberos"), viper.GetBool("http11"),
-		)
-		req, cancel := probes.GetHTTPRequest(
-			s, b,
-			viper.GetDuration("timeout"),
-			scheme, refName, refPort, refName, viper.GetString("path"),
-		)
-		defer cancel()
-		refBody = probes.CheckTLS(s, b, client, req)
-	}
+	refBody := doChecks(s, b, scheme, refName, refPort, refName, refName, servingCA, clientPair)
 
 	/* Check new */
 
 	b.Banner("New IP")
-
-	probes.DNSInfo(s, b, viper.GetDuration("timeout"), newIp.String())
-
-	var newBody []byte
-	switch scheme {
-	case "http":
-		client := probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
-		req, cancel := probes.GetHTTPRequest(
-			s, b,
-			viper.GetDuration("timeout"),
-			scheme, newIp.String(), newPort, refName, viper.GetString("path"),
-		)
-		defer cancel()
-		newBody = probes.CheckTLS(s, b, client, req)
-	case "https":
-		client := probes.GetTLSClient(
-			s, b,
-			viper.GetDuration("timeout"),
-			refName,
-			servingCA, clientPair,
-			viper.GetBool("kerberos"), viper.GetBool("http11"),
-		)
-		req, cancel := probes.GetHTTPRequest(
-			s, b,
-			viper.GetDuration("timeout"),
-			scheme, newIp.String(), newPort, refName, viper.GetString("path"),
-		)
-		defer cancel()
-		newBody = probes.CheckTLS(s, b, client, req)
-	}
+	newBody := doChecks(s, b, scheme, newIp.String(), newPort, refName, refName, servingCA, clientPair)
 
 	/* Body diff */
 
 	b.Banner("Differences")
 
-	if viper.GetBool("print-body") {
+	if viper.GetBool("body") || viper.GetBool("body-full") {
+		fmt.Println()
 		fmt.Println("NEW response body:")
-		fmt.Println(string(newBody))
+
+		bodyLen := len(newBody)
+		printLen := output.Min(bodyLen, 72)
+		if viper.GetBool("body-full") {
+			printLen = bodyLen
+		}
+
+		fmt.Printf("%v", string(newBody[0:printLen])) // assumes utf8
+		if bodyLen > printLen {
+			fmt.Printf("<%d bytes elided>", bodyLen-printLen)
+		}
+		if bodyLen > 0 {
+			fmt.Println()
+		}
 	}
 
 	if !utf8.Valid(refBody) || !utf8.Valid(newBody) {
@@ -177,6 +148,51 @@ func appMain(cmd *cobra.Command, args []string) {
 	fmt.Println()
 
 	os.Exit(0)
+}
+
+func doChecks(s output.TtyStyler, b output.Bios, scheme, target, port, sni, host string, servingCA *x509.Certificate, clientPair *tls.Certificate) (body []byte) {
+	if viper.GetBool("dns") {
+		probes.DNSInfo(s, b, viper.GetDuration("timeout"), target)
+	}
+
+	switch scheme {
+	case "http":
+		client := probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
+		req, cancel := probes.GetHTTPRequest(
+			s, b,
+			viper.GetDuration("timeout"),
+			scheme, target, port, host, viper.GetString("path"),
+		)
+		defer cancel()
+		// TODO: better name: doesn't always do TLS
+		body = probes.CheckTLS(
+			s, b,
+			client, req,
+			viper.GetBool("head"), viper.GetBool("head-full"),
+		)
+	case "https":
+		client := probes.GetTLSClient(
+			s, b,
+			viper.GetDuration("timeout"),
+			sni,
+			servingCA, clientPair,
+			viper.GetBool("kerberos"), viper.GetBool("http11"),
+			viper.GetBool("tls"), viper.GetBool("tls-full"),
+		)
+		req, cancel := probes.GetHTTPRequest(
+			s, b,
+			viper.GetDuration("timeout"),
+			scheme, target, port, host, viper.GetString("path"),
+		)
+		defer cancel()
+		body = probes.CheckTLS(
+			s, b,
+			client, req,
+			viper.GetBool("head"), viper.GetBool("head-full"),
+		)
+	}
+
+	return
 }
 
 /*
