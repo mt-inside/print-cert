@@ -84,6 +84,7 @@ func GetTLSClient(
 	sni string,
 	servingCA *x509.Certificate, clientCert *tls.Certificate,
 	krb, http11 bool,
+	printTLS, printTLSFull bool,
 ) *http.Client {
 
 	// Always make a krb transport, becuase if we make a plain HTTP one and try to wrap it later, we have to copy the bytes (because spnego.Transport embeds http.Transport) and that copies a sync.Mutex.
@@ -124,9 +125,12 @@ func GetTLSClient(
 						return &tls.Certificate{}, nil
 					}
 
-					fmt.Println("Presenting client cert chain")
-					// TODO: verbose mode only
-					s.ClientCertChain(codec.ChainFromCertificate(clientCert), nil)
+					if printTLS || printTLSFull {
+						fmt.Println("Presenting client cert chain")
+						if printTLSFull {
+							s.ClientCertChain(codec.ChainFromCertificate(clientCert), nil)
+						}
+					}
 
 					return clientCert, nil
 				},
@@ -141,25 +145,27 @@ func GetTLSClient(
 				},
 				VerifyConnection: func(cs tls.ConnectionState) error {
 					b.Trace("Hook: all TLS cert verification finished")
-					b.Banner("TLS")
+					if printTLS {
+						b.Banner("TLS")
 
-					fmt.Printf("%s handshake complete\n", s.Noun(output.TLSVersionName(cs.Version)))
-					fmt.Printf("\tSymmetric cypher suite %s\n", s.Noun(tls.CipherSuiteName(cs.CipherSuite)))
-					// Would be nice to print the key exchange algo used but it's not available to us, and indeed all the code relating to it is non-exported from golang's crypto package
-					fmt.Printf("\tALPN proto %s\n", s.OptionalString(cs.NegotiatedProtocol, s.NounStyle))
-					fmt.Printf("\tOCSP info stapled to response? %s\n", s.YesNo(len(cs.OCSPResponse) > 0))
-					fmt.Println()
+						fmt.Printf("%s handshake complete\n", s.Noun(output.TLSVersionName(cs.Version)))
+						fmt.Printf("\tSymmetric cypher suite %s\n", s.Noun(tls.CipherSuiteName(cs.CipherSuite)))
+						// Would be nice to print the key exchange algo used but it's not available to us, and indeed all the code relating to it is non-exported from golang's crypto package
+						fmt.Printf("\tALPN proto %s\n", s.OptionalString(cs.NegotiatedProtocol, s.NounStyle))
+						fmt.Printf("\tOCSP info stapled to response? %s\n", s.YesNo(len(cs.OCSPResponse) > 0))
+						fmt.Println()
 
-					/* Print cert chain */
+						/* Print cert chain */
 
-					fmt.Println("Received serving cert chain")
+						fmt.Println("Received serving cert chain")
 
-					// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
-					// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
-					// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
-					// If caCert is nil ServingCertChainVerified() will use system roots to verify
-					s.ServingCertChainVerified(cs.ServerName, cs.PeerCertificates, servingCA)
-					fmt.Println()
+						// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
+						// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
+						// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
+						// If caCert is nil ServingCertChainVerified() will use system roots to verify
+						s.ServingCertChainVerified(cs.ServerName, cs.PeerCertificates, servingCA)
+						fmt.Println()
+					}
 
 					return nil
 				},
@@ -240,7 +246,11 @@ func printRequestPreamble(s output.TtyStyler, b output.Bios, client *http.Client
 
 // CheckTLS sends the given request using the given client.
 // It prints information about what's returned.
-func CheckTLS(s output.TtyStyler, b output.Bios, client *http.Client, req *http.Request) []byte {
+func CheckTLS(
+	s output.TtyStyler, b output.Bios,
+	client *http.Client, req *http.Request,
+	printMeta, printMetaFull bool,
+) []byte {
 
 	b.Banner("Request")
 
@@ -254,23 +264,33 @@ func CheckTLS(s output.TtyStyler, b output.Bios, client *http.Client, req *http.
 
 	b.Banner("HTTP")
 
-	fmt.Printf("%s", s.Noun(resp.Proto))
-	if resp.StatusCode < 400 {
-		fmt.Printf(" %s", s.Ok(resp.Status))
-	} else if resp.StatusCode < 500 {
-		fmt.Printf(" %s", s.Warn(resp.Status))
-	} else {
-		fmt.Printf(" %s", s.Fail(resp.Status))
-	}
-	fmt.Printf(" from %s", s.OptionalString(resp.Header.Get("server"), s.NounStyle))
-	fmt.Println()
+	if printMeta || printMetaFull {
+		fmt.Printf("%s", s.Noun(resp.Proto))
+		if resp.StatusCode < 400 {
+			fmt.Printf(" %s", s.Ok(resp.Status))
+		} else if resp.StatusCode < 500 {
+			fmt.Printf(" %s", s.Warn(resp.Status))
+		} else {
+			fmt.Printf(" %s", s.Fail(resp.Status))
+		}
+		fmt.Printf(" from %s", s.OptionalString(resp.Header.Get("server"), s.NounStyle))
+		fmt.Println()
 
-	fmt.Printf("\tHSTS? %s\n", s.YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
-	// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
+		if !printMetaFull {
+			fmt.Printf("\tHSTS? %s\n", s.YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
+			// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
 
-	fmt.Printf("\tclaimed %s bytes of %s\n", s.Bright(strconv.FormatInt(int64(resp.ContentLength), 10)), s.Noun(resp.Header.Get("content-type")))
-	if resp.Uncompressed {
-		fmt.Printf("\tcontent was transparently decompressed; length information will not be accurate\n")
+			fmt.Printf("\tclaimed %s bytes of %s\n", s.Bright(strconv.FormatInt(int64(resp.ContentLength), 10)), s.Noun(resp.Header.Get("content-type")))
+			if resp.Uncompressed {
+				fmt.Printf("\tcontent was transparently decompressed; length information will not be accurate\n")
+			}
+		} else {
+			// TODO: use new and improved outputting for this from http-log
+			for k, vs := range resp.Header {
+				fmt.Printf("\t%s = %v\n", s.Addr(k), s.Noun(strings.Join(vs, ",")))
+			}
+		}
+
 	}
 
 	rawBody, err := ioutil.ReadAll(resp.Body)

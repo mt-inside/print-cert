@@ -40,12 +40,17 @@ func main() {
 	cmd.Flags().StringP("sni", "s", "", "SNI ServerName")
 	cmd.Flags().StringP("host", "a", "", "HTTP Host / :authority header")
 	cmd.Flags().StringP("path", "p", "/", "HTTP path to request")
-	cmd.Flags().DurationP("timeout", "t", 5*time.Second, "Timeout for each individual network operation")
+	cmd.Flags().Duration("timeout", 5*time.Second, "Timeout for each individual network operation")
 	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
 
 	/* Output */
-	cmd.Flags().BoolP("show-dns", "d", false, "Show detailed DNS testing for the given addr (note: this is just indicative; the system resolver is used to make the actual connection)")
-	cmd.Flags().BoolP("print-body", "b", false, "Print the returned HTTP body")
+	cmd.Flags().BoolP("dns", "d", false, "Show detailed DNS testing for the given addr (note: this is just indicative; the system resolver is used to make the actual connection)")
+	cmd.Flags().BoolP("tls", "t", true, "Print important agreed TLS parameters")
+	cmd.Flags().BoolP("tls-full", "T", false, "Print all agreed TLS parameters")
+	cmd.Flags().BoolP("head", "m", true, "Print important HTTP response metadata")
+	cmd.Flags().BoolP("head-full", "M", false, "Print all HTTP response metadata")
+	cmd.Flags().BoolP("body", "b", false, "Print truncated returned HTTP body")
+	cmd.Flags().BoolP("body-full", "B", false, "Print full returned HTTP body")
 
 	/* TLS and auth */
 	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate")
@@ -69,15 +74,13 @@ func appMain(cmd *cobra.Command, args []string) {
 	s := output.NewTtyStyler(aurora.NewAurora(true))
 	b := output.NewTtyBios(s)
 
+	/* Deal with args */
+
 	addr := args[0]
 	port := args[1]
 	scheme := args[2]
 	if !(scheme == "http" || scheme == "https") {
 		b.CheckErr(fmt.Errorf("unknown scheme: %s", scheme))
-	}
-
-	if viper.GetBool("show-dns") {
-		probes.DNSInfo(s, b, viper.GetDuration("timeout"), addr)
 	}
 
 	host := viper.GetString("host")
@@ -106,6 +109,8 @@ func appMain(cmd *cobra.Command, args []string) {
 		b.CheckErr(err)
 	}
 
+	/* Build clients */
+
 	var client *http.Client
 	switch scheme {
 	case "http":
@@ -118,6 +123,7 @@ func appMain(cmd *cobra.Command, args []string) {
 			sni,
 			servingCA, clientPair,
 			viper.GetBool("kerberos"), viper.GetBool("http-11"),
+			viper.GetBool("tls"), viper.GetBool("tls-full"),
 		)
 	}
 
@@ -128,17 +134,44 @@ func appMain(cmd *cobra.Command, args []string) {
 	)
 	defer cancel()
 
-	rawBody := probes.CheckTLS(
-		s, b,
-		client,
-		req,
-	)
+	/* Execute  */
 
-	if viper.GetBool("print-body") {
-		fmt.Println(string(rawBody))
+	if viper.GetBool("dns") {
+		probes.DNSInfo(s, b, viper.GetDuration("timeout"), addr)
 	}
 
-	fmt.Println()
+	// TODO: passing [tls,head][-full] into these functions is hideous.
+	// This needs an outputter like http-log's (shouldn't share/duplicate any code but will use a lot of high-level stuff from the styler like styleHeaderArray())
+	// The outputter should be constructed over all the tls-full etc, then it can be unconditiionally called and choose what to print
+	// Pro: the functions on the outputter should be focussed on feeding info *into* it, like "ingestTLSConnState()", "ingestHTTPResponse()" (should do some parsing like looking for hsts header and promoting to struct field)
+	// - there's then one "printAll()" function which looks at all the tls-full etc flags and prints everything
+	// - it can be clever and eg use hsts info from http header in the TLS output section
+	// - make sure the controlflow is such that this is always called to do what it can no matter if we bail out on an abort or an error
+	// - can do other clever stuff like (in http-log) not printing SNI in tls-agreed if we have the tls-negotiation flag set because that will have done it
+	rawBody := probes.CheckTLS(
+		s, b,
+		client, req,
+		viper.GetBool("head"), viper.GetBool("head-full"),
+	)
+
+	if viper.GetBool("body") || viper.GetBool("body-full") {
+		fmt.Println()
+
+		bodyLen := len(rawBody)
+		printLen := output.Min(bodyLen, 72)
+		if viper.GetBool("body-full") {
+			printLen = bodyLen
+		}
+
+		fmt.Printf("%v", string(rawBody[0:printLen])) // assumes utf8
+		if bodyLen > printLen {
+			fmt.Printf("<%d bytes elided>", bodyLen-printLen)
+		}
+		if bodyLen > 0 {
+			fmt.Println()
+		}
+	}
+
 	fmt.Println()
 
 	os.Exit(0)
