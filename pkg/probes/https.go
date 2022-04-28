@@ -175,9 +175,7 @@ func GetTLSClient(
 	}
 
 	// Assuming we don't want krb, just point to the non-spnego parts of the struct
-	c := &http.Client{
-		Transport: &tr.Transport,
-	}
+	c := &http.Client{Transport: &tr.Transport}
 	if krb {
 		c = &http.Client{Transport: tr}
 	}
