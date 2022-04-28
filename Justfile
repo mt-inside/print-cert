@@ -1,24 +1,28 @@
 default:
 	@just --list
 
-install-linters:
+install-tools:
+	go install golang.org/x/tools/cmd/stringer@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 
-lint:
+generate:
+	go generate ./...
+
+lint: generate
 	go fmt ./...
 	go vet ./...
 	staticcheck ./...
 	golangci-lint run ./...
 	go test ./...
 
-print-cert *ARGS: lint
+print-cert *ARGS: generate lint
 	go run ./cmd/print-cert {{ARGS}} localhost 8080 https
 
-print-cert-full *ARGS: lint
-	go run ./cmd/print-cert -k=ssl/client-key.pem -c=ssl/client-cert.pem -C=ssl/server-ca-cert.pem -s example.com {{ARGS}} localhost 8080 https
+print-cert-full *ARGS: generate lint
+	go run ./cmd/print-cert -k=ssl/client-key.pem -c=ssl/client-cert.pem -C=ssl/server-ca-cert.pem -s example.com -T -B {{ARGS}} localhost 8080 https
 
-compare *ARGS: lint
+compare *ARGS: generate lint
 	go run ./cmd/compare {{ARGS}} localhost 8080 127.0.0.1 8443 https
 
 nginx-build:
