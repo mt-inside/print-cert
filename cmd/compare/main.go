@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -46,6 +47,7 @@ func main() {
 	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate file")
 	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate file")
 	cmd.Flags().StringP("key", "k", "", "Path to TLS client key file")
+	cmd.Flags().String("bearer", "", "Path to file whose contents should be used as Authorization: Bearer token")
 	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
 
 	err := viper.BindPFlags(cmd.Flags())
@@ -92,6 +94,13 @@ func appMain(cmd *cobra.Command, args []string) {
 		b.CheckErr(err)
 	}
 
+	var bearerToken string
+	if viper.Get("bearer") != "" {
+		bytes, err := ioutil.ReadFile(viper.Get("bearer").(string))
+		b.CheckErr(err)
+		bearerToken = strings.TrimSpace(string(bytes))
+	}
+
 	/* Begin */
 
 	fmt.Printf("Testing new IP %v against reference host %v\n", s.Addr(newIp.String()), s.Addr(refName))
@@ -99,12 +108,12 @@ func appMain(cmd *cobra.Command, args []string) {
 	/* Check reference */
 
 	b.Banner("Reference host")
-	refBody := doChecks(s, b, scheme, refName, refPort, refName, refName, servingCA, clientPair)
+	refBody := doChecks(s, b, scheme, refName, refPort, refName, refName, servingCA, clientPair, bearerToken)
 
 	/* Check new */
 
 	b.Banner("New IP")
-	newBody := doChecks(s, b, scheme, newIp.String(), newPort, refName, refName, servingCA, clientPair)
+	newBody := doChecks(s, b, scheme, newIp.String(), newPort, refName, refName, servingCA, clientPair, bearerToken)
 
 	/* Body diff */
 
@@ -150,7 +159,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	os.Exit(0)
 }
 
-func doChecks(s output.TtyStyler, b output.Bios, scheme, target, port, sni, host string, servingCA *x509.Certificate, clientPair *tls.Certificate) (body []byte) {
+func doChecks(s output.TtyStyler, b output.Bios, scheme, target, port, sni, host string, servingCA *x509.Certificate, clientPair *tls.Certificate, bearerToken string) (body []byte) {
 	if viper.GetBool("dns") {
 		probes.DNSInfo(s, b, viper.GetDuration("timeout"), target)
 	}
@@ -162,6 +171,7 @@ func doChecks(s output.TtyStyler, b output.Bios, scheme, target, port, sni, host
 			s, b,
 			viper.GetDuration("timeout"),
 			scheme, target, port, host, viper.GetString("path"),
+			bearerToken,
 		)
 		defer cancel()
 		// TODO: better name: doesn't always do TLS
@@ -183,6 +193,7 @@ func doChecks(s output.TtyStyler, b output.Bios, scheme, target, port, sni, host
 			s, b,
 			viper.GetDuration("timeout"),
 			scheme, target, port, host, viper.GetString("path"),
+			bearerToken,
 		)
 		defer cancel()
 		body = probes.CheckTLS(

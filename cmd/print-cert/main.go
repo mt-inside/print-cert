@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -56,6 +57,7 @@ func main() {
 	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate")
 	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate")
 	cmd.Flags().StringP("key", "k", "", "Path to TLS client key")
+	cmd.Flags().String("bearer", "", "Path to file whose contents should be used as Authorization: Bearer token")
 	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
 
 	err := viper.BindPFlags(cmd.Flags())
@@ -109,6 +111,15 @@ func appMain(cmd *cobra.Command, args []string) {
 		b.CheckErr(err)
 	}
 
+	/* Load other request files */
+
+	var bearerToken string
+	if viper.Get("bearer") != "" {
+		bytes, err := ioutil.ReadFile(viper.Get("bearer").(string))
+		b.CheckErr(err)
+		bearerToken = strings.TrimSpace(string(bytes))
+	}
+
 	/* Build clients */
 
 	var client *http.Client
@@ -131,6 +142,7 @@ func appMain(cmd *cobra.Command, args []string) {
 		s, b,
 		viper.GetDuration("timeout"),
 		scheme, addr, port, host, viper.GetString("path"),
+		bearerToken,
 	)
 	defer cancel()
 
