@@ -187,7 +187,12 @@ func GetTLSClient(
 }
 
 // GetHTTPRequest returns an HTTP Request that can be used to call endpoints under test.
-func GetHTTPRequest(s output.TtyStyler, b output.Bios, timeout time.Duration, scheme, addr, port, host, path string) (*http.Request, context.CancelFunc) {
+func GetHTTPRequest(
+	s output.TtyStyler, b output.Bios,
+	timeout time.Duration,
+	scheme, addr, port, host, path string,
+	bearerToken string,
+) (*http.Request, context.CancelFunc) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 
@@ -214,9 +219,18 @@ func GetHTTPRequest(s output.TtyStyler, b output.Bios, timeout time.Duration, sc
 		req.Host = hostPort
 	}
 
-	// FIXME. Shouldn't handle JTW first-class here; just add a flag for user to be able to pass arbitrary headers
-	jwt, _ := ioutil.ReadFile("/Users/matt/work/personal/talks/istio-demo-master/42-jwt-pki/one.jwt")
-	req.Header.Add("authorization", fmt.Sprintf("Bearer %s", strings.TrimSpace(string(jwt))))
+	// TODO: this shouldn't be here, prints at an awkward time. Yet another reason for an outputter for this project, and one that holds state
+	if bearerToken != "" {
+		req.Header.Add("authorization", fmt.Sprintf("Bearer %s", bearerToken))
+
+		if token, err := codec.TryParseJWT(bearerToken); err == nil {
+			start, end, ID, subject, issuer, audience, _, _ := codec.JWT(token)
+			fmt.Printf("Bearer token format recognised: ")
+			s.JWTSummary(start, end, ID, subject, issuer, audience)
+		} else {
+			panic(err)
+		}
+	}
 
 	return req, cancel
 }

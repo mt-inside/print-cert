@@ -20,7 +20,8 @@ print-cert *ARGS: generate lint
 	go run ./cmd/print-cert {{ARGS}} localhost 8080 https
 
 print-cert-full *ARGS: generate lint
-	go run ./cmd/print-cert -k=ssl/client-key.pem -c=ssl/client-cert.pem -C=ssl/server-ca-cert.pem -s example.com -T -B {{ARGS}} localhost 8080 https
+	# FIXME: hard-coded path
+	go run ./cmd/print-cert -k=ssl/client-key.pem -c=ssl/client-cert.pem -C=ssl/server-ca-cert.pem --bearer /home/matt/work/personal/talks/istio-demo-master/41/pki/one.jwt -s example.com -T -B {{ARGS}} localhost 8080 https
 
 compare *ARGS: generate lint
 	go run ./cmd/compare {{ARGS}} localhost 8080 127.0.0.1 8443 https
