@@ -40,8 +40,8 @@ func main() {
 	cmd.Flags().BoolP("tls-full", "T", false, "Print all agreed TLS parameters")
 	cmd.Flags().BoolP("head", "m", true, "Print important HTTP response metadata")
 	cmd.Flags().BoolP("head-full", "M", false, "Print all HTTP response metadata")
-	cmd.Flags().BoolP("body", "b", false, "Print truncated returned HTTP body")
-	cmd.Flags().BoolP("body-full", "B", false, "Print full returned HTTP body")
+	cmd.Flags().BoolP("body", "b", false, "Print truncated HTTP response body")
+	cmd.Flags().BoolP("body-full", "B", false, "Print full HTTP response body")
 
 	/* TLS and auth */
 	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate file")

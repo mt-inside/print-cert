@@ -223,10 +223,9 @@ func GetHTTPRequest(
 	if bearerToken != "" {
 		req.Header.Add("authorization", fmt.Sprintf("Bearer %s", bearerToken))
 
-		if token, err := codec.TryParseJWT(bearerToken); err == nil {
-			start, end, ID, subject, issuer, audience, _, _ := codec.JWT(token)
+		if token, err := codec.ParseJWTNoSignature(bearerToken); err == nil {
 			fmt.Printf("Bearer token format recognised: ")
-			s.JWTSummary(start, end, ID, subject, issuer, audience)
+			s.JWTSummary(token)
 		} else {
 			panic(err)
 		}
