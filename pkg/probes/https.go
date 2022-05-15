@@ -163,7 +163,7 @@ func GetTLSClient(
 						// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
 						// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
 						// If caCert is nil ServingCertChainVerified() will use system roots to verify
-						s.ServingCertChainVerified(cs.ServerName, cs.PeerCertificates, servingCA)
+						s.ServingCertChainVerifyNameSignature(cs.PeerCertificates, cs.ServerName, servingCA)
 						fmt.Println()
 					}
 
