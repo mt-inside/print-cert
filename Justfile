@@ -13,7 +13,7 @@ lint: generate
 	go fmt ./...
 	go vet ./...
 	staticcheck ./...
-	golangci-lint run ./...
+	golangci-lint run ./... # TODO: --enable-all
 	go test ./...
 
 print-cert *ARGS: generate lint
@@ -21,12 +21,16 @@ print-cert *ARGS: generate lint
 
 print-cert-mtls-jwt *ARGS: generate lint
 	# FIXME: hard-coded path
-	go run ./cmd/print-cert -k=ssl/client-key.pem -c=ssl/client-cert.pem -C=ssl/server-ca-cert.pem --bearer /Users/matt/work/personal/talks/istio-demo-master/41/pki/one.jwt -s example.com -T -B {{ARGS}} localhost 8080 https
+	go run ./cmd/print-cert -k=ssl/client-key.pem -c=ssl/client-cert.pem -C=ssl/server-ca-cert.pem --bearer /home/matt/work/personal/talks/istio-demo-master/41/pki/one.jwt -s example.com -T -B {{ARGS}} localhost 8080 https
 
-print-cert-mtls-jwt-body *ARGS: generate lint
+curl-mtls-jwt-body *ARGS: generate lint
 	# FIXME: hard-coded path
 	# TODO: ability to send request body
-	curlie --key ssl/client-key.pem --cert ssl/client-cert.pem --cacert ssl/server-ca-cert.pem --oauth2-bearer "$(cat /Users/matt/work/personal/talks/istio-demo-master/41/pki/one.jwt)" https://example.com --connect-to example.com:443:localhost:8080 -d @test-body.txt
+	curlie --key ssl/client-key.pem --cert ssl/client-cert.pem --cacert ssl/server-ca-cert.pem --oauth2-bearer "$(cat /home/matt/work/personal/talks/istio-demo-master/41/pki/one.jwt)" https://example.com --connect-to example.com:443:localhost:8080 --data-binary @test-body.txt
+curl-mtls-self-sign-jwt-body *ARGS: generate lint
+	# FIXME: hard-coded path
+	# TODO: ability to send request body
+	curlie --key ssl/client-key.pem --cert ssl/client-cert.pem --insecure --oauth2-bearer "$(cat /home/matt/work/personal/talks/istio-demo-master/41/pki/one.jwt)" https://example.com --connect-to example.com:443:localhost:8080 --data-binary @test-body.txt
 
 
 compare *ARGS: generate lint
