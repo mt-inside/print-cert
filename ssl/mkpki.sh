@@ -2,6 +2,8 @@ OPENSSL=$(which openssl)
 # Avoid ancient system openssl on mac, if available (produces certs with deprecated old algos that are rejected)
 [ -f /usr/local/opt/openssl/bin/openssl ] && OPENSSL=/usr/local/opt/openssl/bin/openssl
 
+pushd out
+
 $OPENSSL req -x509 -newkey rsa:2048 -nodes -subj "/CN=Test Server CA" -days 365 -keyout server-ca-key.pem -out server-ca-cert.pem
 
 server_ext="
@@ -28,3 +30,5 @@ cat client-cert.pem client-ca-cert.pem > client-cert-bundle.pem
 
 
 # TODO: move/copy JWT-creation code from ?talks/apigw-demo ?talks/istio-demo to here
+
+popd
