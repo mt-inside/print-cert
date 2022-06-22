@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/logrusorgru/aurora/v3"
+	"github.com/mt-inside/go-usvc"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/print-cert/pkg/probes"
@@ -124,7 +125,7 @@ func appMain(cmd *cobra.Command, args []string) {
 		fmt.Println("NEW response body:")
 
 		bodyLen := len(newBody)
-		printLen := output.Min(bodyLen, 72)
+		printLen := usvc.MinInt(bodyLen, 72)
 		if viper.GetBool("body-full") {
 			printLen = bodyLen
 		}
