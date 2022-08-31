@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"strings"
@@ -89,7 +88,7 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	var servingCA *x509.Certificate
 	if viper.Get("ca") != "" {
-		bytes, err := ioutil.ReadFile(viper.Get("ca").(string))
+		bytes, err := os.ReadFile(viper.Get("ca").(string))
 		b.CheckErr(err)
 		servingCA, err = codec.ParseCertificate(bytes)
 		b.CheckErr(err)
@@ -97,7 +96,7 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	var bearerToken string
 	if viper.Get("bearer") != "" {
-		bytes, err := ioutil.ReadFile(viper.Get("bearer").(string))
+		bytes, err := os.ReadFile(viper.Get("bearer").(string))
 		b.CheckErr(err)
 		bearerToken = strings.TrimSpace(string(bytes))
 	}
