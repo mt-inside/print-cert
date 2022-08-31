@@ -235,7 +235,6 @@ func GetHTTPRequest(
 }
 
 func printRequestPreamble(s output.TtyStyler, b output.Bios, client *http.Client, req *http.Request) {
-	fmt.Printf("Beginning request...\n")
 	host, port, err := net.SplitHostPort(req.URL.Host)
 	if err != nil {
 		host = req.URL.Host
@@ -248,11 +247,11 @@ func printRequestPreamble(s output.TtyStyler, b output.Bios, client *http.Client
 	}
 	systemRemoteIPs, err := net.LookupHost(host) // ie what the system resolver comes up with, as that's what the http client will use, and it includes files and other nsswitch stuff not just what we manually find in DNS
 	b.CheckErr(err)
-	fmt.Printf("\tTCP addresses: %s (from system/golang resolver)\n", s.List(output.ZipHostsPort(systemRemoteIPs, port), s.AddrStyle))
+	fmt.Printf("TCP addresses: %s (from system/golang resolver)\n", s.List(output.ZipHostsPort(systemRemoteIPs, port), s.AddrStyle))
 	if req.URL.Scheme == "https" {
-		fmt.Printf("\tTLS handshake: SNI ServerName %s\n", s.Addr(getUnderlyingHttpTransport(client).TLSClientConfig.ServerName))
+		fmt.Printf("TLS handshake: SNI ServerName %s\n", s.Addr(getUnderlyingHttpTransport(client).TLSClientConfig.ServerName))
 	}
-	fmt.Printf("\tHTTP request: Host %s | %s %s\n", s.Addr(req.Host), s.Verb(req.Method), s.UrlPath(req.URL))
+	fmt.Printf("HTTP request: Host %s | %s %s\n", s.Addr(req.Host), s.Verb(req.Method), s.UrlPath(req.URL))
 }
 
 // CheckTLS sends the given request using the given client.

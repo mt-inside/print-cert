@@ -167,7 +167,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	)
 
 	if viper.GetBool("body") || viper.GetBool("body-full") {
-		fmt.Println()
+		b.Banner("HTTP Body")
 
 		bodyLen := len(rawBody)
 		printLen := usvc.MinInt(bodyLen, 72)
@@ -183,8 +183,6 @@ func appMain(cmd *cobra.Command, args []string) {
 			fmt.Println()
 		}
 	}
-
-	fmt.Println()
 
 	os.Exit(0)
 }
