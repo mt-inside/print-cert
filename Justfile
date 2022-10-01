@@ -16,6 +16,9 @@ lint: generate
 	golangci-lint run ./... # TODO: --enable-all
 	go test ./...
 
+install *ARGS: generate lint
+	go install ./cmd/print-cert {{ARGS}}
+
 print-cert *ARGS: generate lint
 	go run ./cmd/print-cert {{ARGS}} localhost 8080 https
 
