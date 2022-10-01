@@ -197,7 +197,7 @@ func GetHTTPRequest(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 
 	addrPort := net.JoinHostPort(addr, port)
-	hostPort := net.JoinHostPort(host, port)
+	// don't add port to host, because that's _connection_ port and an overridden host header won't want that
 
 	pathParts, err := url.Parse(path)
 	if err != nil {
@@ -212,12 +212,9 @@ func GetHTTPRequest(
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", l7Addr.String(), nil)
 	b.CheckErr(err)
-	// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
-	if port == "80" || port == "443" {
-		req.Host = host // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
-	} else {
-		req.Host = hostPort
-	}
+	req.Host = host
+
+	req.Header.Add("user-agent", "print-cert TODO from build info")
 
 	// TODO: this shouldn't be here, prints at an awkward time. Yet another reason for an outputter for this project, and one that holds state
 	if bearerToken != "" {

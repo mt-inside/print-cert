@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -87,11 +88,16 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	host := viper.GetString("host")
 	if host == "" {
-		host = addr
+		// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
+		if port == "80" || port == "443" {
+			host = addr // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
+		} else {
+			host = net.JoinHostPort(addr, port)
+		}
 	}
 	sni := viper.GetString("sni")
 	if sni == "" {
-		sni = host
+		sni = host // TODO: should SNI ever include port?
 	}
 
 	/* Load TLS material */
