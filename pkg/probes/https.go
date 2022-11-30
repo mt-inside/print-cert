@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/MarshallWace/go-spnego"
+
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 )

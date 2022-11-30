@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/peterzen/goresolver"
+
+	"github.com/mt-inside/http-log/pkg/output"
 )
 
 /* DNSInfo prints detailed results from forward and reverse zone resolution of the given address. addr can be either a hostname or an IPv4/6
