@@ -122,7 +122,7 @@ func GetTLSClient(
 					b.Trace("Asked for a TLS client certificate")
 
 					if clientCert == nil {
-						b.PrintWarn("Asked to present a client cert but none configured (-c/-k). Not presenting a cert, this might cause the server to abort the handshake.")
+						b.PrintWarn("Server asked for a client cert but none configured (-c/-k). Not presenting a cert, this might cause the server to abort the handshake.")
 						return &tls.Certificate{}, nil
 					}
 
