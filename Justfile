@@ -16,6 +16,10 @@ lint: generate
 	golangci-lint run ./... # TODO: --enable-all
 	go test ./...
 
+build: lint
+	# We don't statically link here (although we do use CGO), so the resulting binary isn't quite the same as what ends up in the container, but close
+	go build ./cmd/print-cert
+
 install *ARGS: generate lint
 	go install ./cmd/print-cert {{ARGS}}
 
