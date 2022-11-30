@@ -9,8 +9,9 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/miekg/dns"
-	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/peterzen/goresolver"
+
+	"github.com/mt-inside/http-log/pkg/output"
 )
 
 func init() {

@@ -14,11 +14,12 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/mt-inside/go-usvc"
-	"github.com/mt-inside/http-log/pkg/codec"
-	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/print-cert/pkg/probes"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/mt-inside/http-log/pkg/codec"
+	"github.com/mt-inside/http-log/pkg/output"
 )
 
 /* TODO
