@@ -10,7 +10,20 @@ import (
 	"github.com/peterzen/goresolver"
 
 	"github.com/mt-inside/http-log/pkg/output"
+	"github.com/mt-inside/print-cert/pkg/state"
 )
+
+func ResolveSystemDNS(b output.Bios, addr string, probeData *state.ProbeData) net.IP {
+	// TODO: doc DNS: to actually connect, We use system, always select one so we can say which one. CGO uses getaddrinfo(). Go-native looks in DNS and also reads /etc/hosts (LookupAddr and LookupIP now equivalent except signature)
+	// https://golang-nuts.narkive.com/s2corx0l/go-nuts-net-lookuphost-vs-net-lookupip
+	ips, err := net.LookupIP(addr)
+	b.CheckErr(err)
+	probeData.DnsSystemResolves = ips
+	ip := ips[0]
+	b.Trace("Connection will use first-returned system-resolved IP: %s", ip)
+
+	return ip
+}
 
 /* DNSInfo prints detailed results from forward and reverse zone resolution of the given address. addr can be either a hostname or an IPv4/6
  * Note: This only looks in DNS, like say nslookup does.
@@ -20,7 +33,8 @@ import (
  * Downside is we can't stop it trying localhost.$domain, because it doesn't know "localhost" is special - it's only special cause it's in /etc/hosts, and we can't avoid the fact that a lot of DNS servers respond for localhost.foo. when they shouldn't
  */
 func DNSInfo(s output.TtyStyler, b output.Bios, timeout time.Duration, addr string) {
-	b.Banner("DNS (information only)")
+	// TODO: move printing to the printer
+	b.Banner("DNS - extra manual resolution (information only)")
 
 	ip := net.ParseIP(addr)
 	if ip == nil {

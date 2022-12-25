@@ -10,17 +10,13 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
-	"unicode/utf8"
 
 	"github.com/MarshallWace/go-spnego"
 
-	"github.com/mt-inside/print-cert/pkg/state"
-
-	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
+	"github.com/mt-inside/print-cert/pkg/state"
 )
 
 func getCheckRedirect(s output.TtyStyler, b output.Bios, daemonData *state.DaemonData, c *http.Client) func(*http.Request, []*http.Request) error {
@@ -39,15 +35,13 @@ func getCheckRedirect(s output.TtyStyler, b output.Bios, daemonData *state.Daemo
 
 		fmt.Println()
 
-		printRequestPreamble(s, b, c, req)
-
 		return nil
 	}
 }
 
 // GetPlaintextClient returns an HTTP Client for calling non-TLS endpoints.
 // It prints lots of info along the way.
-func GetPlaintextClient(s output.TtyStyler, b output.Bios, daemonData *state.DaemonData) *http.Client {
+func GetPlaintextClient(s output.TtyStyler, b output.Bios, daemonData *state.DaemonData, probeData *state.ProbeData) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -56,7 +50,7 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios, daemonData *state.Dae
 					KeepAlive: 60 * time.Second,
 					// Note: happens "after creating the network connection but before actually dialing."
 					Control: func(network, address string, rawConn syscall.RawConn) error {
-						b.Banner("TCP")
+						probeData.TransportDialTime = time.Now()
 						b.Trace("Dialing", "addr", address)
 
 						return nil
@@ -64,8 +58,11 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios, daemonData *state.Dae
 				}
 				conn, err := dialer.DialContext(ctx, network, address)
 				b.CheckErr(err)
+				b.Trace("Connected", "to", conn.RemoteAddr(), "from", conn.LocalAddr())
 
-				fmt.Printf("Connected %s -> %s\n", s.Addr(conn.LocalAddr().String()), s.Addr(conn.RemoteAddr().String()))
+				probeData.TransportConnTime = time.Now()
+				probeData.TransportLocalAddr = conn.LocalAddr()
+				probeData.TransportRemoteAddr = conn.RemoteAddr()
 
 				return conn, err
 			},
@@ -83,7 +80,6 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios, daemonData *state.Dae
 // It prints lots of info along the way.
 func GetTLSClient(
 	s output.TtyStyler, b output.Bios,
-	printTLS, printTLSFull bool,
 	daemonData *state.DaemonData,
 	probeData *state.ProbeData,
 ) *http.Client {
@@ -98,9 +94,7 @@ func GetTLSClient(
 					KeepAlive: 60 * time.Second,
 					// Note: happens "after creating the network connection but before actually dialing."
 					Control: func(network, address string, rawConn syscall.RawConn) error {
-						b.Banner("TCP")
-						now := time.Now()
-						probeData.TransportDialTime = &now
+						probeData.TransportDialTime = time.Now()
 						b.Trace("Dialing", "addr", address) // TODO ever any different to the below? Should just capture the time here, and print it if in transport-full
 
 						return nil
@@ -108,12 +102,11 @@ func GetTLSClient(
 				}
 				conn, err := dialer.DialContext(ctx, network, address)
 				b.CheckErr(err)
+				b.Trace("Connected", "to", conn.RemoteAddr(), "from", conn.LocalAddr())
 
-				fmt.Printf("Connected %s -> %s\n", s.Addr(conn.LocalAddr().String()), s.Addr(conn.RemoteAddr().String())) // TODO remove
-				now := time.Now()
-				probeData.TransportConnTime = &now
-				probeData.TransportLocalAddress = conn.LocalAddr()
-				probeData.TransportRemoteAddress = conn.RemoteAddr()
+				probeData.TransportConnTime = time.Now()
+				probeData.TransportLocalAddr = conn.LocalAddr()
+				probeData.TransportRemoteAddr = conn.RemoteAddr()
 
 				return conn, err
 			},
@@ -126,25 +119,16 @@ func GetTLSClient(
 				ServerName:         daemonData.TlsServerName, // SNI for TLS vhosting
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 					probeData.TlsClientCertRequest = true
-					b.Trace("Asked for a TLS client certificate")
+					b.Trace("TLS: Asked for a client certificate")
 
 					if daemonData.TlsClientPair == nil {
-						b.PrintWarn("Server asked for a client cert but none configured (-c/-k). Not presenting a cert, this might cause the server to abort the handshake.")
 						return &tls.Certificate{}, nil
-					}
-
-					if printTLS || printTLSFull {
-						//need a deamonData with these thigns in (reused)
-						fmt.Println("Presenting client cert chain")
-						if printTLSFull {
-							s.ClientCertChain(codec.ChainFromCertificate(daemonData.TlsClientPair), nil)
-						}
 					}
 
 					return daemonData.TlsClientPair, nil
 				},
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-					b.Trace("Hook: TLS built-in cert verification finished (no-op in our config)")
+					b.Trace("TLS: built-in cert verification finished (no-op in our config)")
 
 					// TODO: should extract serving keys here, for purity
 					// Also tbf we might not reach the next function if say alpn negotiation fails
@@ -156,35 +140,21 @@ func GetTLSClient(
 					return nil
 				},
 				VerifyConnection: func(cs tls.ConnectionState) error {
-					b.Trace("Hook: all TLS cert verification finished")
-					if printTLS {
-						b.Banner("TLS")
+					b.Trace("TLS: all cert verification finished")
 
-						fmt.Printf("%s handshake complete\n", s.Noun(output.TLSVersionName(cs.Version)))
-						probeData.TlsAgreedVersion = cs.Version
-						fmt.Printf("\tSymmetric cypher suite %s\n", s.Noun(tls.CipherSuiteName(cs.CipherSuite)))
-						probeData.TlsAgreedCipherSuite = cs.CipherSuite
-						// Would be nice to print the key exchange algo used but it's not available to us, and indeed all the code relating to it is non-exported from golang's crypto package
-						fmt.Printf("\tALPN proto %s\n", s.OptionalString(cs.NegotiatedProtocol, s.NounStyle))
-						probeData.TlsAgreedALPN = cs.NegotiatedProtocol
-						fmt.Printf("\tOCSP info stapled to response? %s\n", s.YesNo(len(cs.OCSPResponse) > 0))
-						probeData.TlsOCSPStapled = len(cs.OCSPResponse) > 0
-						fmt.Println()
+					probeData.TlsAgreedVersion = cs.Version
+					probeData.TlsAgreedCipherSuite = cs.CipherSuite
+					// Would be nice to print the key exchange algo used but it's not available to us, and indeed all the code relating to it is non-exported from golang's crypto package
+					probeData.TlsAgreedALPN = cs.NegotiatedProtocol
+					probeData.TlsOCSPStapled = len(cs.OCSPResponse) > 0
 
-						/* Print cert chain */
-
-						fmt.Println("Received serving cert chain")
-
-						// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
-						// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
-						// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
-						// If caCert is nil ServingCertChainVerified() will use system roots to verify
-						s.ServingCertChainVerifyNameSignature(cs.PeerCertificates, daemonData.TlsServerName, daemonData.TlsServingCA)
-						// TODO: verify servername == our requested sni.
-						probeData.TlsServerCerts = cs.PeerCertificates
-						// TODO: serving CA in through deamonData
-						fmt.Println()
-					}
+					// Note that the Print() function verifies the certs we're presented against the CAs provided (or built-in)
+					// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
+					// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
+					// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
+					// If caCert is nil ServingCertChainVerified() will use system roots to verify
+					// TODO: verify servername == our requested sni.
+					probeData.TlsServerCerts = cs.PeerCertificates
 
 					return nil
 				},
@@ -208,19 +178,16 @@ func GetTLSClient(
 // GetHTTPRequest returns an HTTP Request that can be used to call endpoints under test.
 func GetHTTPRequest(
 	s output.TtyStyler, b output.Bios,
-	scheme, addr, port string,
+	scheme string, addr net.IP, port uint64, path string,
 	daemonData *state.DaemonData,
 ) (*http.Request, context.CancelFunc) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), daemonData.Timeout)
 
-	addrPort := net.JoinHostPort(addr, port)
-	// don't add port to host, because that's _connection_ port and an overridden host header won't want that
-
-	pathParts, err := url.Parse(daemonData.HttpPath)
-	if err != nil {
-		panic(err)
-	}
+	/* This is the URL we give to the HTTP client library. The "Host" part of the URL is just used as the connection address, and not seen on the other end */
+	addrPort := net.JoinHostPort(addr.String(), strconv.FormatUint(port, 10))
+	pathParts, err := url.Parse(path)
+	b.CheckErr(err)
 	l7Addr := url.URL{
 		Scheme:   scheme,
 		Host:     addrPort, // could leave off 80 or 443 but not an error to include them
@@ -228,45 +195,18 @@ func GetHTTPRequest(
 		RawQuery: pathParts.RawQuery,
 		Fragment: pathParts.EscapedFragment(),
 	}
-	req, err := http.NewRequestWithContext(ctx, "GET", l7Addr.String(), nil)
+	daemonData.HttpPath = &l7Addr
+
+	req, err := http.NewRequestWithContext(ctx, daemonData.HttpMethod, daemonData.HttpPath.String(), nil)
 	b.CheckErr(err)
+
 	req.Host = daemonData.HttpHost
-
 	req.Header.Add("user-agent", "print-cert TODO from build info")
-
-	// TODO: this shouldn't be here, prints at an awkward time. Yet another reason for an outputter for this project, and one that holds state
 	if daemonData.AuthBearerToken != "" {
 		req.Header.Add("authorization", fmt.Sprintf("Bearer %s", daemonData.AuthBearerToken))
-
-		if token, err := codec.ParseJWTNoSignature(daemonData.AuthBearerToken); err == nil {
-			fmt.Printf("Bearer token format recognised: ")
-			s.JWTSummary(token)
-		} else {
-			panic(err)
-		}
 	}
 
 	return req, cancel
-}
-
-func printRequestPreamble(s output.TtyStyler, b output.Bios, client *http.Client, req *http.Request) {
-	host, port, err := net.SplitHostPort(req.URL.Host)
-	if err != nil {
-		host = req.URL.Host
-		switch req.URL.Scheme {
-		case "http":
-			port = "80"
-		case "https":
-			port = "443"
-		}
-	}
-	systemRemoteIPs, err := net.LookupHost(host) // ie what the system resolver comes up with, as that's what the http client will use, and it includes files and other nsswitch stuff not just what we manually find in DNS
-	b.CheckErr(err)
-	fmt.Printf("TCP addresses: %s (resolver: %s)\n", s.List(output.ZipHostsPort(systemRemoteIPs, port), s.AddrStyle), dnsResolverName)
-	if req.URL.Scheme == "https" {
-		fmt.Printf("TLS handshake: SNI ServerName %s\n", s.Addr(getUnderlyingHttpTransport(client).TLSClientConfig.ServerName))
-	}
-	fmt.Printf("HTTP request: Host %s | %s %s\n", s.Addr(req.Host), s.Verb(req.Method), s.UrlPath(req.URL))
 }
 
 // CheckTLS sends the given request using the given client.
@@ -274,63 +214,25 @@ func printRequestPreamble(s output.TtyStyler, b output.Bios, client *http.Client
 func CheckTLS(
 	s output.TtyStyler, b output.Bios,
 	client *http.Client, req *http.Request,
-	printMeta, printMetaFull bool,
-) []byte {
-
-	b.Banner("Request")
-
-	printRequestPreamble(s, b, client, req)
-
+	readBody bool, // performance optimisation
+	probeData *state.ProbeData,
+) {
 	resp, err := client.Do(req)
 	b.CheckErr(err)
 	defer resp.Body.Close()
 
-	/* == HTTP == */
+	probeData.HttpProto = resp.Proto
+	probeData.HttpStatusCode = resp.StatusCode
+	probeData.HttpStatusMessage = resp.Status
+	probeData.HttpHeaders = resp.Header
+	probeData.HttpContentLength = resp.ContentLength
+	probeData.HttpCompressed = resp.Uncompressed
 
-	b.Banner("HTTP")
-
-	if printMeta || printMetaFull {
-		fmt.Printf("%s", s.Noun(resp.Proto))
-		if resp.StatusCode < 400 {
-			fmt.Printf(" %s", s.Ok(resp.Status))
-		} else if resp.StatusCode < 500 {
-			fmt.Printf(" %s", s.Warn(resp.Status))
-		} else {
-			fmt.Printf(" %s", s.Fail(resp.Status))
-		}
-		fmt.Printf(" from %s", s.OptionalString(resp.Header.Get("server"), s.NounStyle))
-		fmt.Println()
-
-		if !printMetaFull {
-			// TODO: useful TLS info checklist
-			// - [x] HSTS: printed here
-			// - [ ] OCSP pinning: printed in TLS section, will move to here when we have a stateful outputter
-			// - [ ] HPKP: obsolete, but may as well print it if it's present (not print anything when it's not)
-			// - [ ] Certificate Transparency: understand it, do stuff. Is a header? Is also stuff in the OCSP bundle?
-			// - [ ] DNS CAA records: should investigate and print in the TLS section
-			fmt.Printf("\tHSTS? %s\n", s.YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
-			// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
-
-			fmt.Printf("\tclaimed %s bytes of %s\n", s.Bright(strconv.FormatInt(int64(resp.ContentLength), 10)), s.Noun(resp.Header.Get("content-type")))
-			if resp.Uncompressed {
-				fmt.Printf("\tcontent was transparently decompressed; length information will not be accurate\n")
-			}
-		} else {
-			// TODO: use new and improved outputting for this from http-log
-			for k, vs := range resp.Header {
-				fmt.Printf("\t%s = %v\n", s.Addr(k), s.Noun(strings.Join(vs, ",")))
-			}
-		}
-
+	if readBody {
+		rawBody, err := io.ReadAll(resp.Body)
+		b.CheckErr(err)
+		probeData.BodyBytes = rawBody
 	}
-
-	rawBody, err := io.ReadAll(resp.Body)
-	b.CheckErr(err)
-	fmt.Printf("\tactual %s bytes of body read\n", s.Bright(strconv.FormatInt(int64(len(rawBody)), 10)))
-
-	fmt.Printf("\tvalid utf-8? %s\n", s.YesNo(utf8.Valid(rawBody)))
-
-	return rawBody
 }
 
 func getUnderlyingHttpTransport(client *http.Client) *http.Transport {
