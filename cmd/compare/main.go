@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -72,10 +73,13 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	/* Reference server */
 	refName := args[0]
-	refPort := args[1]
+	refIp := net.ParseIP(refName)
+	refPort, err := strconv.ParseUint(args[1], 10, 16)
+	b.CheckErr(err)
 	/* Comparison */
 	newIp := net.ParseIP(args[2])
-	newPort := args[3]
+	newPort, err := strconv.ParseUint(args[3], 10, 16)
+	b.CheckErr(err)
 	/* Common */
 	scheme := args[4]
 
@@ -90,7 +94,8 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	daemonData.TlsServerName = refName
 	daemonData.HttpHost = refName
-	daemonData.HttpPath = viper.GetString("path")
+
+	daemonData.HttpMethod = "GET"
 
 	daemonData.AuthKrb = viper.GetBool("kerberos")
 	daemonData.HttpForce11 = viper.GetBool("http-11")
@@ -121,12 +126,12 @@ func appMain(cmd *cobra.Command, args []string) {
 	/* Check reference */
 
 	b.Banner("Reference host")
-	refBody := doChecks(s, b, scheme, refName, refPort, daemonData)
+	refBody := doChecks(s, b, scheme, refName, refIp, refPort, daemonData)
 
 	/* Check new */
 
 	b.Banner("New IP")
-	newBody := doChecks(s, b, scheme, newIp.String(), newPort, daemonData)
+	newBody := doChecks(s, b, scheme, newIp.String(), newIp, newPort, daemonData)
 
 	/* Body diff */
 
@@ -172,19 +177,19 @@ func appMain(cmd *cobra.Command, args []string) {
 	os.Exit(0)
 }
 
-func doChecks(s output.TtyStyler, b output.Bios, scheme, target, port string, daemonData *state.DaemonData) (body []byte) {
+func doChecks(s output.TtyStyler, b output.Bios, scheme string, targetName string, targetIP net.IP, port uint64, daemonData *state.DaemonData) (body []byte) {
 	if viper.GetBool("dns") {
-		probes.DNSInfo(s, b, viper.GetDuration("timeout"), target)
+		probes.DNSInfo(s, b, viper.GetDuration("timeout"), targetName)
 	}
 
 	probeData := state.NewProbeData()
 
 	switch scheme {
 	case "http":
-		client := probes.GetPlaintextClient(s, b, daemonData)
+		client := probes.GetPlaintextClient(s, b, daemonData, probeData)
 		req, cancel := probes.GetHTTPRequest(
 			s, b,
-			scheme, target, port,
+			scheme, targetIP, port, viper.GetString("path"),
 			daemonData,
 		)
 		defer cancel()
@@ -192,25 +197,24 @@ func doChecks(s output.TtyStyler, b output.Bios, scheme, target, port string, da
 		body = probes.CheckTLS(
 			s, b,
 			client, req,
-			viper.GetBool("head"), viper.GetBool("head-full"),
+			probeData,
 		)
 	case "https":
 		client := probes.GetTLSClient(
 			s, b,
-			viper.GetBool("tls"), viper.GetBool("tls-full"),
 			daemonData,
 			probeData,
 		)
 		req, cancel := probes.GetHTTPRequest(
 			s, b,
-			scheme, target, port,
+			scheme, targetIP, port, viper.GetString("path"),
 			daemonData,
 		)
 		defer cancel()
 		body = probes.CheckTLS(
 			s, b,
 			client, req,
-			viper.GetBool("head"), viper.GetBool("head-full"),
+			probeData,
 		)
 	}
 

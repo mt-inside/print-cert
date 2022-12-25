@@ -2,4 +2,4 @@
 
 package probes
 
-const dnsResolverName = "system (eg nsswitch / libc)"
+const DnsResolverName = "system ie nsswitch / libc"

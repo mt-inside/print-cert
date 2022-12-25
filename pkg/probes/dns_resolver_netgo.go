@@ -2,4 +2,4 @@
 
 package probes
 
-const dnsResolverName = "netgo"
+const DnsResolverName = "netgo"
