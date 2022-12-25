@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -13,10 +12,12 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/logrusorgru/aurora/v3"
-	"github.com/mt-inside/go-usvc"
-	"github.com/mt-inside/print-cert/pkg/probes"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/mt-inside/go-usvc"
+	"github.com/mt-inside/print-cert/pkg/probes"
+	"github.com/mt-inside/print-cert/pkg/state"
 
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
@@ -75,8 +76,19 @@ func main() {
 
 func appMain(cmd *cobra.Command, args []string) {
 
+	// Need arch:
+	// - first thing to do is to make it build into an output object a la http-log.
+	// - move golang resolver to DNS etc
+	// - commander object that run a probe. Needs to be able to re-enter itself for redirects. Also needs to be drivable eg from a cli that runs it every 5s
+	// - needs an actual -L / --follow-redirects CLI option
+	// - "arg" stuff like TLS certs shouldn't be re-loaded, and tty stylers shouldn't be re-made, but state-holding objects should be new
+	// - but target IP and port need to be changable (so they can be given from whatever DNS system in chosen ,and also varied by the compare front-end)
+	// - factor to Plaintext and TLS prober. Construct over daemonData? internal methods to get transport, client, etc. Interface for Probe()
+
 	s := output.NewTtyStyler(aurora.NewAurora(true))
 	b := output.NewTtyBios(s)
+
+	daemonData := state.NewDaemonData()
 
 	/* Deal with args */
 
@@ -87,73 +99,77 @@ func appMain(cmd *cobra.Command, args []string) {
 		b.CheckErr(fmt.Errorf("unknown scheme: %s", scheme))
 	}
 
-	host := viper.GetString("host")
-	if host == "" {
+	daemonData.Timeout = viper.GetDuration("timeout")
+
+	daemonData.HttpHost = viper.GetString("host")
+	if daemonData.HttpHost == "" {
 		// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
 		if port == "80" || port == "443" {
-			host = addr // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
+			daemonData.HttpHost = addr // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
 		} else {
-			host = net.JoinHostPort(addr, port)
+			daemonData.HttpHost = net.JoinHostPort(addr, port)
 		}
 	}
-	sni := viper.GetString("sni")
-	if sni == "" {
-		sni = host // TODO: should SNI ever include port?
+	daemonData.TlsServerName = viper.GetString("sni")
+	if daemonData.TlsServerName == "" {
+		daemonData.TlsServerName = daemonData.HttpHost // TODO: should SNI ever include port?
 	}
+
+	daemonData.HttpPath = viper.GetString("path")
+
+	daemonData.AuthKrb = viper.GetBool("kerberos")
+	daemonData.HttpForce11 = viper.GetBool("http-11")
 
 	/* Load TLS material */
 
-	var clientPair *tls.Certificate
 	if viper.Get("cert") != "" || viper.Get("key") != "" {
 		pair, err := tls.LoadX509KeyPair(viper.Get("cert").(string), viper.Get("key").(string))
 		b.CheckErr(err)
-		clientPair = &pair
+		daemonData.TlsClientPair = &pair
 	}
 
-	var servingCA *x509.Certificate
 	if viper.Get("ca") != "" {
 		bytes, err := os.ReadFile(viper.Get("ca").(string))
 		b.CheckErr(err)
-		servingCA, err = codec.ParseCertificate(bytes)
+		daemonData.TlsServingCA, err = codec.ParseCertificate(bytes)
 		b.CheckErr(err)
 	}
 
 	/* Load other request files */
 
-	var bearerToken string
 	if viper.Get("bearer") != "" {
 		bytes, err := os.ReadFile(viper.Get("bearer").(string))
 		b.CheckErr(err)
-		bearerToken = strings.TrimSpace(string(bytes))
+		daemonData.AuthBearerToken = strings.TrimSpace(string(bytes))
 	}
+
+	/* Make state object */
+
+	probeData := state.NewProbeData()
 
 	/* Build clients */
 
 	var client *http.Client
 	switch scheme {
 	case "http":
-		client = probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
+		client = probes.GetPlaintextClient(s, b, daemonData)
 	case "https":
-		// it's ok to pass nil servingCA and/or clientPair
 		client = probes.GetTLSClient(
 			s, b,
-			viper.GetDuration("timeout"),
-			sni,
-			servingCA, clientPair,
-			viper.GetBool("kerberos"), viper.GetBool("http-11"),
 			viper.GetBool("tls"), viper.GetBool("tls-full"),
+			daemonData,
+			probeData,
 		)
 	}
 
 	req, cancel := probes.GetHTTPRequest(
 		s, b,
-		viper.GetDuration("timeout"),
-		scheme, addr, port, host, viper.GetString("path"),
-		bearerToken,
+		scheme, addr, port,
+		daemonData,
 	)
 	defer cancel()
 
-	/* Execute  */
+	/* Execute */
 
 	if viper.GetBool("dns") {
 		probes.DNSInfo(s, b, viper.GetDuration("timeout"), addr)
@@ -182,6 +198,7 @@ func appMain(cmd *cobra.Command, args []string) {
 			printLen = bodyLen
 		}
 
+		// TODO should share a print-body with all the other places that do this, which should check it's UTF, print that status, deal with elision, etc
 		fmt.Printf("%v", string(rawBody[0:printLen])) // assumes utf8
 		if bodyLen > printLen {
 			fmt.Printf("<%d bytes elided>", bodyLen-printLen)
@@ -190,6 +207,11 @@ func appMain(cmd *cobra.Command, args []string) {
 			fmt.Println()
 		}
 	}
+
+	/* Print */
+
+	spew.Dump(daemonData)
+	spew.Dump(probeData)
 
 	os.Exit(0)
 }

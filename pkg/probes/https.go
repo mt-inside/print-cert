@@ -17,11 +17,13 @@ import (
 
 	"github.com/MarshallWace/go-spnego"
 
+	"github.com/mt-inside/print-cert/pkg/state"
+
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
-func getCheckRedirect(s output.TtyStyler, b output.Bios, timeout time.Duration, c *http.Client) func(*http.Request, []*http.Request) error {
+func getCheckRedirect(s output.TtyStyler, b output.Bios, daemonData *state.DaemonData, c *http.Client) func(*http.Request, []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
 		b.Banner("Redirect")
 
@@ -33,7 +35,7 @@ func getCheckRedirect(s output.TtyStyler, b output.Bios, timeout time.Duration, 
 		b.Trace("Updating HTTP request", "Host", req.URL.Host)
 		req.Host = req.URL.Host
 
-		DNSInfo(s, b, timeout, req.URL.Host)
+		DNSInfo(s, b, daemonData.Timeout, req.URL.Host)
 
 		fmt.Println()
 
@@ -45,12 +47,12 @@ func getCheckRedirect(s output.TtyStyler, b output.Bios, timeout time.Duration, 
 
 // GetPlaintextClient returns an HTTP Client for calling non-TLS endpoints.
 // It prints lots of info along the way.
-func GetPlaintextClient(s output.TtyStyler, b output.Bios, timeout time.Duration) *http.Client {
+func GetPlaintextClient(s output.TtyStyler, b output.Bios, daemonData *state.DaemonData) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				dialer := &net.Dialer{
-					Timeout:   timeout,
+					Timeout:   daemonData.Timeout,
 					KeepAlive: 60 * time.Second,
 					// Note: happens "after creating the network connection but before actually dialing."
 					Control: func(network, address string, rawConn syscall.RawConn) error {
@@ -67,12 +69,12 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios, timeout time.Duration
 
 				return conn, err
 			},
-			ResponseHeaderTimeout: timeout,
+			ResponseHeaderTimeout: daemonData.Timeout,
 			DisableCompression:    true,
 		},
 	}
 
-	c.CheckRedirect = getCheckRedirect(s, b, timeout, c)
+	c.CheckRedirect = getCheckRedirect(s, b, daemonData, c)
 
 	return c
 }
@@ -81,11 +83,9 @@ func GetPlaintextClient(s output.TtyStyler, b output.Bios, timeout time.Duration
 // It prints lots of info along the way.
 func GetTLSClient(
 	s output.TtyStyler, b output.Bios,
-	timeout time.Duration,
-	sni string,
-	servingCA *x509.Certificate, clientCert *tls.Certificate,
-	krb, http11 bool,
 	printTLS, printTLSFull bool,
+	daemonData *state.DaemonData,
+	probeData *state.ProbeData,
 ) *http.Client {
 
 	// Always make a krb transport, becuase if we make a plain HTTP one and try to wrap it later, we have to copy the bytes (because spnego.Transport embeds http.Transport) and that copies a sync.Mutex.
@@ -94,12 +94,14 @@ func GetTLSClient(
 		Transport: http.Transport{
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				dialer := &net.Dialer{
-					Timeout:   timeout,
+					Timeout:   daemonData.Timeout,
 					KeepAlive: 60 * time.Second,
 					// Note: happens "after creating the network connection but before actually dialing."
 					Control: func(network, address string, rawConn syscall.RawConn) error {
 						b.Banner("TCP")
-						b.Trace("Dialing", "addr", address)
+						now := time.Now()
+						probeData.TransportDialTime = &now
+						b.Trace("Dialing", "addr", address) // TODO ever any different to the below? Should just capture the time here, and print it if in transport-full
 
 						return nil
 					},
@@ -107,36 +109,45 @@ func GetTLSClient(
 				conn, err := dialer.DialContext(ctx, network, address)
 				b.CheckErr(err)
 
-				fmt.Printf("Connected %s -> %s\n", s.Addr(conn.LocalAddr().String()), s.Addr(conn.RemoteAddr().String()))
+				fmt.Printf("Connected %s -> %s\n", s.Addr(conn.LocalAddr().String()), s.Addr(conn.RemoteAddr().String())) // TODO remove
+				now := time.Now()
+				probeData.TransportConnTime = &now
+				probeData.TransportLocalAddress = conn.LocalAddr()
+				probeData.TransportRemoteAddress = conn.RemoteAddr()
 
 				return conn, err
 			},
-			TLSHandshakeTimeout:   timeout, // assume this is just the TLS handshake ie tcp handshake is covered by the dialer
-			ResponseHeaderTimeout: timeout,
+			TLSHandshakeTimeout:   daemonData.Timeout, // assume this is just the TLS handshake ie tcp handshake is covered by the dialer
+			ResponseHeaderTimeout: daemonData.Timeout,
 			DisableCompression:    true,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true, // deliberate, qv
 				Renegotiation:      tls.RenegotiateOnceAsClient,
-				ServerName:         sni, // SNI for TLS vhosting
+				ServerName:         daemonData.TlsServerName, // SNI for TLS vhosting
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+					probeData.TlsClientCertRequest = true
 					b.Trace("Asked for a TLS client certificate")
 
-					if clientCert == nil {
+					if daemonData.TlsClientPair == nil {
 						b.PrintWarn("Server asked for a client cert but none configured (-c/-k). Not presenting a cert, this might cause the server to abort the handshake.")
 						return &tls.Certificate{}, nil
 					}
 
 					if printTLS || printTLSFull {
+						//need a deamonData with these thigns in (reused)
 						fmt.Println("Presenting client cert chain")
 						if printTLSFull {
-							s.ClientCertChain(codec.ChainFromCertificate(clientCert), nil)
+							s.ClientCertChain(codec.ChainFromCertificate(daemonData.TlsClientPair), nil)
 						}
 					}
 
-					return clientCert, nil
+					return daemonData.TlsClientPair, nil
 				},
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 					b.Trace("Hook: TLS built-in cert verification finished (no-op in our config)")
+
+					// TODO: should extract serving keys here, for purity
+					// Also tbf we might not reach the next function if say alpn negotiation fails
 
 					if len(verifiedChains) > 0 {
 						panic("Shouldn't see this cause we set InsecureSkipVerify")
@@ -150,10 +161,14 @@ func GetTLSClient(
 						b.Banner("TLS")
 
 						fmt.Printf("%s handshake complete\n", s.Noun(output.TLSVersionName(cs.Version)))
+						probeData.TlsAgreedVersion = cs.Version
 						fmt.Printf("\tSymmetric cypher suite %s\n", s.Noun(tls.CipherSuiteName(cs.CipherSuite)))
+						probeData.TlsAgreedCipherSuite = cs.CipherSuite
 						// Would be nice to print the key exchange algo used but it's not available to us, and indeed all the code relating to it is non-exported from golang's crypto package
 						fmt.Printf("\tALPN proto %s\n", s.OptionalString(cs.NegotiatedProtocol, s.NounStyle))
+						probeData.TlsAgreedALPN = cs.NegotiatedProtocol
 						fmt.Printf("\tOCSP info stapled to response? %s\n", s.YesNo(len(cs.OCSPResponse) > 0))
+						probeData.TlsOCSPStapled = len(cs.OCSPResponse) > 0
 						fmt.Println()
 
 						/* Print cert chain */
@@ -164,25 +179,28 @@ func GetTLSClient(
 						// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
 						// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
 						// If caCert is nil ServingCertChainVerified() will use system roots to verify
-						s.ServingCertChainVerifyNameSignature(cs.PeerCertificates, cs.ServerName, servingCA)
+						s.ServingCertChainVerifyNameSignature(cs.PeerCertificates, daemonData.TlsServerName, daemonData.TlsServingCA)
+						// TODO: verify servername == our requested sni.
+						probeData.TlsServerCerts = cs.PeerCertificates
+						// TODO: serving CA in through deamonData
 						fmt.Println()
 					}
 
 					return nil
 				},
 			},
-			ForceAttemptHTTP2: !http11, // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
+			ForceAttemptHTTP2: !daemonData.HttpForce11, // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
 		},
 	}
 
-	// Assuming we don't want krb, just point to the non-spnego parts of the struct
+	// Assuming we don't want krb, just point to the non-spnego parts of the struct (hack)
 	c := &http.Client{Transport: &tr.Transport}
-	if krb {
+	if daemonData.AuthKrb {
 		c = &http.Client{Transport: tr}
 	}
 
 	// Really ugly that this can't be set in the literal (so that it can reference and reach into the client and mutate it)
-	c.CheckRedirect = getCheckRedirect(s, b, timeout, c)
+	c.CheckRedirect = getCheckRedirect(s, b, daemonData, c)
 
 	return c
 }
@@ -190,17 +208,16 @@ func GetTLSClient(
 // GetHTTPRequest returns an HTTP Request that can be used to call endpoints under test.
 func GetHTTPRequest(
 	s output.TtyStyler, b output.Bios,
-	timeout time.Duration,
-	scheme, addr, port, host, path string,
-	bearerToken string,
+	scheme, addr, port string,
+	daemonData *state.DaemonData,
 ) (*http.Request, context.CancelFunc) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), daemonData.Timeout)
 
 	addrPort := net.JoinHostPort(addr, port)
 	// don't add port to host, because that's _connection_ port and an overridden host header won't want that
 
-	pathParts, err := url.Parse(path)
+	pathParts, err := url.Parse(daemonData.HttpPath)
 	if err != nil {
 		panic(err)
 	}
@@ -213,15 +230,15 @@ func GetHTTPRequest(
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", l7Addr.String(), nil)
 	b.CheckErr(err)
-	req.Host = host
+	req.Host = daemonData.HttpHost
 
 	req.Header.Add("user-agent", "print-cert TODO from build info")
 
 	// TODO: this shouldn't be here, prints at an awkward time. Yet another reason for an outputter for this project, and one that holds state
-	if bearerToken != "" {
-		req.Header.Add("authorization", fmt.Sprintf("Bearer %s", bearerToken))
+	if daemonData.AuthBearerToken != "" {
+		req.Header.Add("authorization", fmt.Sprintf("Bearer %s", daemonData.AuthBearerToken))
 
-		if token, err := codec.ParseJWTNoSignature(bearerToken); err == nil {
+		if token, err := codec.ParseJWTNoSignature(daemonData.AuthBearerToken); err == nil {
 			fmt.Printf("Bearer token format recognised: ")
 			s.JWTSummary(token)
 		} else {
@@ -285,6 +302,12 @@ func CheckTLS(
 		fmt.Println()
 
 		if !printMetaFull {
+			// TODO: useful TLS info checklist
+			// - [x] HSTS: printed here
+			// - [ ] OCSP pinning: printed in TLS section, will move to here when we have a stateful outputter
+			// - [ ] HPKP: obsolete, but may as well print it if it's present (not print anything when it's not)
+			// - [ ] Certificate Transparency: understand it, do stuff. Is a header? Is also stuff in the OCSP bundle?
+			// - [ ] DNS CAA records: should investigate and print in the TLS section
 			fmt.Printf("\tHSTS? %s\n", s.YesNo(resp.Header.Get("Strict-Transport-Security") != ""))
 			// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
 
