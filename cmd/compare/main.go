@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -12,11 +11,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/logrusorgru/aurora/v3"
-	"github.com/mt-inside/go-usvc"
-	"github.com/mt-inside/print-cert/pkg/probes"
 	dmp "github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/mt-inside/go-usvc"
+	"github.com/mt-inside/print-cert/pkg/probes"
+	"github.com/mt-inside/print-cert/pkg/state"
 
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
@@ -67,10 +68,15 @@ func appMain(cmd *cobra.Command, args []string) {
 	s := output.NewTtyStyler(aurora.NewAurora(true))
 	b := output.NewTtyBios(s)
 
+	daemonData := state.NewDaemonData()
+
+	/* Reference server */
 	refName := args[0]
 	refPort := args[1]
+	/* Comparison */
 	newIp := net.ParseIP(args[2])
 	newPort := args[3]
+	/* Common */
 	scheme := args[4]
 
 	if newIp == nil {
@@ -80,41 +86,47 @@ func appMain(cmd *cobra.Command, args []string) {
 		b.CheckErr(fmt.Errorf("unknown scheme: %s", scheme))
 	}
 
-	var clientPair *tls.Certificate
+	daemonData.Timeout = viper.GetDuration("timeout")
+
+	daemonData.TlsServerName = refName
+	daemonData.HttpHost = refName
+	daemonData.HttpPath = viper.GetString("path")
+
+	daemonData.AuthKrb = viper.GetBool("kerberos")
+	daemonData.HttpForce11 = viper.GetBool("http-11")
+
 	if viper.Get("cert") != "" || viper.Get("key") != "" {
 		pair, err := tls.LoadX509KeyPair(viper.Get("cert").(string), viper.Get("key").(string))
 		b.CheckErr(err)
-		clientPair = &pair
+		daemonData.TlsClientPair = &pair
 	}
 
-	var servingCA *x509.Certificate
 	if viper.Get("ca") != "" {
 		bytes, err := os.ReadFile(viper.Get("ca").(string))
 		b.CheckErr(err)
-		servingCA, err = codec.ParseCertificate(bytes)
+		daemonData.TlsServingCA, err = codec.ParseCertificate(bytes)
 		b.CheckErr(err)
 	}
 
-	var bearerToken string
 	if viper.Get("bearer") != "" {
 		bytes, err := os.ReadFile(viper.Get("bearer").(string))
 		b.CheckErr(err)
-		bearerToken = strings.TrimSpace(string(bytes))
+		daemonData.AuthBearerToken = strings.TrimSpace(string(bytes))
 	}
 
 	/* Begin */
 
-	fmt.Printf("Testing new IP %v against reference host %v\n", s.Addr(newIp.String()), s.Addr(refName))
+	fmt.Printf("Testing new IP %v against reference host %v\n", s.Addr(newIp.String()), s.Addr(daemonData.HttpHost))
 
 	/* Check reference */
 
 	b.Banner("Reference host")
-	refBody := doChecks(s, b, scheme, refName, refPort, refName, refName, servingCA, clientPair, bearerToken)
+	refBody := doChecks(s, b, scheme, refName, refPort, daemonData)
 
 	/* Check new */
 
 	b.Banner("New IP")
-	newBody := doChecks(s, b, scheme, newIp.String(), newPort, refName, refName, servingCA, clientPair, bearerToken)
+	newBody := doChecks(s, b, scheme, newIp.String(), newPort, daemonData)
 
 	/* Body diff */
 
@@ -160,19 +172,20 @@ func appMain(cmd *cobra.Command, args []string) {
 	os.Exit(0)
 }
 
-func doChecks(s output.TtyStyler, b output.Bios, scheme, target, port, sni, host string, servingCA *x509.Certificate, clientPair *tls.Certificate, bearerToken string) (body []byte) {
+func doChecks(s output.TtyStyler, b output.Bios, scheme, target, port string, daemonData *state.DaemonData) (body []byte) {
 	if viper.GetBool("dns") {
 		probes.DNSInfo(s, b, viper.GetDuration("timeout"), target)
 	}
 
+	probeData := state.NewProbeData()
+
 	switch scheme {
 	case "http":
-		client := probes.GetPlaintextClient(s, b, viper.GetDuration("timeout"))
+		client := probes.GetPlaintextClient(s, b, daemonData)
 		req, cancel := probes.GetHTTPRequest(
 			s, b,
-			viper.GetDuration("timeout"),
-			scheme, target, port, host, viper.GetString("path"),
-			bearerToken,
+			scheme, target, port,
+			daemonData,
 		)
 		defer cancel()
 		// TODO: better name: doesn't always do TLS
@@ -184,17 +197,14 @@ func doChecks(s output.TtyStyler, b output.Bios, scheme, target, port, sni, host
 	case "https":
 		client := probes.GetTLSClient(
 			s, b,
-			viper.GetDuration("timeout"),
-			sni,
-			servingCA, clientPair,
-			viper.GetBool("kerberos"), viper.GetBool("http11"),
 			viper.GetBool("tls"), viper.GetBool("tls-full"),
+			daemonData,
+			probeData,
 		)
 		req, cancel := probes.GetHTTPRequest(
 			s, b,
-			viper.GetDuration("timeout"),
-			scheme, target, port, host, viper.GetString("path"),
-			bearerToken,
+			scheme, target, port,
+			daemonData,
 		)
 		defer cancel()
 		body = probes.CheckTLS(
