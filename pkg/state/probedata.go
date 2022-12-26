@@ -100,8 +100,8 @@ func (pD *ProbeData) Print(
 		// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
 		// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
 		// If caCert is nil ServingCertChainVerified() will use system roots to verify
-		s.ServingCertChainVerifyNameSignature(pD.TlsServerCerts, daemonData.TlsServerName, daemonData.TlsServingCA)
-		// FIXME: the, yanno, "cert valid" line (from ^^) is only showing if we pass a cacert on the cmdline. Is the arg above not nill when there's no flag?
+		// The name given is verified against the cert.
+		s.ServingCertChainVerifyNameSignature(pD.TlsServerCerts, daemonData.TlsValidateName, daemonData.TlsServingCA, printTlsFull)
 
 		/* TLS agreement summary */
 
@@ -130,6 +130,7 @@ func (pD *ProbeData) Print(
 			if token, err := codec.ParseJWTNoSignature(daemonData.AuthBearerToken); err == nil {
 				fmt.Printf("\tPresented bearer token: ")
 				s.JWTSummary(token)
+				fmt.Println()
 			} else {
 				panic(err)
 			}

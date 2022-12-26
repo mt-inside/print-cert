@@ -12,10 +12,13 @@ type DaemonData struct {
 
 	DnsSystemResolver string
 
-	TlsEnabled    bool
+	TlsEnabled bool
+	// Name to send for SNI, might be empty
 	TlsServerName string
-	TlsClientPair *tls.Certificate
-	TlsServingCA  *x509.Certificate
+	// Name to validate presented certs against, shouldn't be empty
+	TlsValidateName string
+	TlsClientPair   *tls.Certificate
+	TlsServingCA    *x509.Certificate
 
 	HttpHost    string
 	HttpMethod  string

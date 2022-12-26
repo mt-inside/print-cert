@@ -128,6 +128,12 @@ func appMain(cmd *cobra.Command, args []string) {
 		daemonData.TlsServerName = viper.GetString("host")
 	}
 
+	// Name to validate received certs against - fall back some non-empty string, even if it is an IP
+	daemonData.TlsValidateName = daemonData.TlsServerName
+	if daemonData.TlsValidateName == "" {
+		daemonData.TlsValidateName = target
+	}
+
 	daemonData.HttpMethod = "GET"
 
 	daemonData.AuthKrb = viper.GetBool("kerberos")
