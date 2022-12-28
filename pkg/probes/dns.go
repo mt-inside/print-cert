@@ -9,9 +9,9 @@ import (
 	"github.com/miekg/dns"
 	"github.com/peterzen/goresolver"
 
-	"github.com/mt-inside/print-cert/pkg/state"
-
 	"github.com/mt-inside/http-log/pkg/output"
+	"github.com/mt-inside/http-log/pkg/utils"
+	"github.com/mt-inside/print-cert/pkg/state"
 )
 
 func dnsSystem(
@@ -24,12 +24,19 @@ func dnsSystem(
 	// TODO: doc DNS: to actually connect, We use system, always select one so we can say which one. CGO uses getaddrinfo(). Go-native looks in DNS and also reads /etc/hosts (LookupAddr and LookupIP now equivalent except signature)
 	// https://golang-nuts.narkive.com/s2corx0l/go-nuts-net-lookuphost-vs-net-lookupip
 	// FIXME: what if it's an IP. Check Manual
-	ips, err := net.LookupIP(addr)
-	b.CheckErr(err)
-	probeData.DnsSystemResolves = ips
-
-	ip := ips[0]
-	b.Trace("Connection will use first-returned system-resolved IP: %s", ip)
+	ip := net.ParseIP(addr)
+	if ip != nil {
+		names, err := net.LookupAddr(ip.String())
+		b.CheckErr(err)
+		probeData.DnsSystemResolves = names
+		b.Trace("Provided target %s is already an IP.", ip)
+	} else {
+		ips, err := net.LookupIP(addr)
+		b.CheckErr(err)
+		probeData.DnsSystemResolves = utils.MapToString(ips)
+		ip = ips[0]
+		b.Trace("Connection will use first-returned system-resolved IP: %s", ip)
+	}
 
 	return ip
 }
@@ -48,24 +55,26 @@ func dnsManual(
 	probeData *state.ProbeData,
 	addr string,
 ) {
-	// TODO: move printing to the printer
+	// Ideally we'd save all this info in probeData and then print in Print(), but it's a lot of effort and this always runs in a separate phase
 	b.Banner("DNS - extra manual resolution (information only)")
 
 	ip := net.ParseIP(addr)
-	if ip == nil {
-		ips, fqdn := queryDNS(s, b, daemonData.Timeout, addr)
-		for _, ip := range ips {
-			revNames := queryRevDNS(s, b, daemonData.Timeout, ip)
-			if len(revNames) > 0 {
-				checkDNSConsistent(s, b, fqdn, revNames)
-			}
-		}
-	} else {
+	if ip != nil {
+		// It's an IP: do reverse lookup
 		names := queryRevDNS(s, b, daemonData.Timeout, ip)
 		for _, name := range names {
 			ips, _ := queryDNS(s, b, daemonData.Timeout, name)
 			if len(ips) > 0 {
 				checkRevDNSConsistent(s, b, ip, ips)
+			}
+		}
+	} else {
+		// It's not an IP; assume it's a name: do forwards lookup
+		ips, fqdn := queryDNS(s, b, daemonData.Timeout, addr)
+		for _, ip := range ips {
+			revNames := queryRevDNS(s, b, daemonData.Timeout, ip)
+			if len(revNames) > 0 {
+				checkDNSConsistent(s, b, fqdn, revNames)
 			}
 		}
 	}
