@@ -12,16 +12,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/mt-inside/go-usvc"
-
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
-	"github.com/mt-inside/http-log/pkg/utils"
 )
 
 // TODO: some/all of these fields to be type Event{timestamp, value: T}
 // TODO: rename me ResponseData
 type ProbeData struct {
-	DnsSystemResolves []net.IP
+	DnsSystemResolves []string
 
 	TransportConnNo     uint
 	TransportDialTime   time.Time
@@ -63,7 +61,7 @@ func (pD *ProbeData) Print(
 ) {
 	if printDns || printDnsFull {
 		b.Banner(fmt.Sprintf("DNS - system resolver (%s)", daemonData.DnsSystemResolver))
-		fmt.Printf("TCP addresses: %s\n", s.List(utils.Map(pD.DnsSystemResolves, func(ip net.IP) string { return ip.String() }), s.AddrStyle))
+		fmt.Printf("TCP addresses: %s\n", s.List(pD.DnsSystemResolves, s.AddrStyle))
 	}
 
 	// TODO: make transport printing optional. What are http-log's Transport and Tls short flags?
