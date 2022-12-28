@@ -23,7 +23,6 @@ func dnsSystem(
 ) net.IP {
 	// TODO: doc DNS: to actually connect, We use system, always select one so we can say which one. CGO uses getaddrinfo(). Go-native looks in DNS and also reads /etc/hosts (LookupAddr and LookupIP now equivalent except signature)
 	// https://golang-nuts.narkive.com/s2corx0l/go-nuts-net-lookuphost-vs-net-lookupip
-	// FIXME: what if it's an IP. Check Manual
 	ip := net.ParseIP(addr)
 	if ip != nil {
 		names, err := net.LookupAddr(ip.String())

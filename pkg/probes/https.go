@@ -9,9 +9,9 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/mt-inside/print-cert/pkg/state"
-
 	"github.com/mt-inside/http-log/pkg/output"
+	"github.com/mt-inside/http-log/pkg/utils"
+	"github.com/mt-inside/print-cert/pkg/state"
 )
 
 // two objects
@@ -50,7 +50,6 @@ func Probe(
 	b output.Bios,
 	daemonData *state.DaemonData,
 	probeData *state.ProbeData,
-	scheme string,
 	target string,
 	port uint64,
 	path string,
@@ -58,14 +57,12 @@ func Probe(
 ) {
 	targetIP := dnsSystem(s, b, daemonData, probeData, target) // TODO make optional - eventually as perf optim, but now to stop it printing (plaintext too)
 	var client *http.Client
-	switch scheme {
-	case "http":
-		client = buildPlaintextClient(s, b, daemonData, probeData)
-	case "https":
-		daemonData.TlsEnabled = true
+	if daemonData.TlsEnabled {
 		client = buildTlsClient(s, b, daemonData, probeData)
+	} else {
+		client = buildPlaintextClient(s, b, daemonData, probeData)
 	}
-	request, cancel := buildHttpRequest(s, b, daemonData, probeData, "https", targetIP, port, path)
+	request, cancel := buildHttpRequest(s, b, daemonData, probeData, targetIP, port, path)
 	defer cancel()
 	dnsManual(s, b, daemonData, probeData, target)
 	probe(s, b, daemonData, probeData, client, request, readBody)
@@ -76,7 +73,6 @@ func buildHttpRequest(
 	b output.Bios,
 	daemonData *state.DaemonData,
 	probeData *state.ProbeData,
-	scheme string,
 	addr net.IP,
 	port uint64,
 	path string,
@@ -89,7 +85,7 @@ func buildHttpRequest(
 	pathParts, err := url.Parse(path)
 	b.CheckErr(err)
 	l7Addr := url.URL{
-		Scheme:   scheme,
+		Scheme:   utils.Ternary(daemonData.TlsEnabled, "https", "http"),
 		Host:     addrPort, // could leave off 80 or 443 but not an error to include them
 		Path:     pathParts.EscapedPath(),
 		RawQuery: pathParts.RawQuery,

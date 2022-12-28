@@ -34,8 +34,8 @@ func init() {
 func main() {
 
 	cmd := &cobra.Command{
-		Use:  "addr port scheme",
-		Args: cobra.ExactArgs(3),
+		Use:  "addr port",
+		Args: cobra.ExactArgs(2),
 		Run:  appMain,
 	}
 
@@ -57,6 +57,7 @@ func main() {
 	cmd.Flags().BoolP("body-full", "B", false, "Print full HTTP response body")
 
 	/* TLS and auth */
+	cmd.Flags().BoolP("no-tls", "P", false, "Make a plaintext 'HTTP' connection rather than a TLS 'HTTPS' connection")
 	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate")
 	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate")
 	cmd.Flags().StringP("key", "k", "", "Path to TLS client key")
@@ -96,12 +97,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	target := args[0]
 	port, err := strconv.ParseUint(args[1], 10, 16)
 	b.CheckErr(err)
-	// TODO: turn this into a --no-tls arg
-	// - then test all print flags with --no-tls
-	scheme := args[2]
-	if !(scheme == "http" || scheme == "https") {
-		b.CheckErr(fmt.Errorf("unknown scheme: %s", scheme))
-	}
+	// TODO test all print flags with --no-tls
 
 	daemonData.Timeout = viper.GetDuration("timeout")
 	daemonData.DnsSystemResolver = probes.DnsResolverName
@@ -133,6 +129,7 @@ func appMain(cmd *cobra.Command, args []string) {
 		daemonData.TlsValidateName = target
 	}
 
+	daemonData.TlsEnabled = !viper.GetBool("no-tls")
 	daemonData.HttpMethod = "GET"
 
 	daemonData.AuthKrb = viper.GetBool("kerberos")
@@ -164,7 +161,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	/* Execute */
 
 	probeData := state.NewProbeData()
-	probes.Probe(s, b, daemonData, probeData, scheme, target, port, viper.GetString("path"), viper.GetBool("body") || viper.GetBool("body-full"))
+	probes.Probe(s, b, daemonData, probeData, target, port, viper.GetString("path"), viper.GetBool("body") || viper.GetBool("body-full"))
 
 	/* Print */
 

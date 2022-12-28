@@ -26,8 +26,8 @@ import (
 func main() {
 
 	cmd := &cobra.Command{
-		Use:  "reference-dns-name reference-port new-ip new-port scheme",
-		Args: cobra.ExactArgs(5),
+		Use:  "reference-dns-name reference-port new-ip new-port",
+		Args: cobra.ExactArgs(4),
 		Run:  appMain,
 	}
 
@@ -47,6 +47,7 @@ func main() {
 	cmd.Flags().BoolP("head-full", "M", false, "Print all HTTP response metadata")
 
 	/* TLS and auth */
+	cmd.Flags().BoolP("no-tls", "P", false, "Make a plaintext 'HTTP' connection rather than a TLS 'HTTPS' connection")
 	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate file")
 	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate file")
 	cmd.Flags().StringP("key", "k", "", "Path to TLS client key file")
@@ -79,11 +80,6 @@ func appMain(cmd *cobra.Command, args []string) {
 	newTarget := args[2]
 	newPort, err := strconv.ParseUint(args[3], 10, 16)
 	b.CheckErr(err)
-	/* Common */
-	scheme := args[4]
-	if !(scheme == "http" || scheme == "https") {
-		b.CheckErr(fmt.Errorf("unknown scheme: %s", scheme))
-	}
 
 	daemonData.Timeout = viper.GetDuration("timeout")
 	daemonData.DnsSystemResolver = probes.DnsResolverName
@@ -119,6 +115,7 @@ func appMain(cmd *cobra.Command, args []string) {
 		daemonData.TlsValidateName = refTarget
 	}
 
+	daemonData.TlsEnabled = !viper.GetBool("no-tls")
 	daemonData.HttpMethod = "GET"
 
 	daemonData.AuthKrb = viper.GetBool("kerberos")
@@ -152,7 +149,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	b.Banner("Reference host")
 
 	refProbeData := state.NewProbeData()
-	probes.Probe(s, b, daemonData, refProbeData, scheme, refTarget, refPort, viper.GetString("path"), true)
+	probes.Probe(s, b, daemonData, refProbeData, refTarget, refPort, viper.GetString("path"), true)
 
 	refProbeData.Print(
 		s, b,
@@ -171,7 +168,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	b.Banner("New IP")
 
 	newProbeData := state.NewProbeData()
-	probes.Probe(s, b, daemonData, newProbeData, scheme, newTarget, newPort, viper.GetString("path"), true)
+	probes.Probe(s, b, daemonData, newProbeData, newTarget, newPort, viper.GetString("path"), true)
 
 	newProbeData.Print(
 		s, b,
