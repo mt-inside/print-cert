@@ -12,12 +12,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/mt-inside/go-usvc"
+
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
 
 // TODO: some/all of these fields to be type Event{timestamp, value: T}
+// TODO: rename me ResponseData
 type ProbeData struct {
 	DnsSystemResolves []net.IP
 
@@ -105,7 +107,6 @@ func (pD *ProbeData) Print(
 
 		/* TLS agreement summary */
 
-		// TODO: "verified against $servingCA" through deamonData - already happens in long-name-fn above! That should print a note if validating against system certs
 		// TODO: useful TLS info checklist
 		// - [x] HSTS
 		// - [x] OCSP pinning

@@ -16,7 +16,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/mt-inside/go-usvc"
 	"github.com/mt-inside/print-cert/pkg/probes"
 	"github.com/mt-inside/print-cert/pkg/state"
 
@@ -33,18 +32,19 @@ func main() {
 	}
 
 	/* Request */
+	cmd.Flags().StringP("sni", "s", "", "TLS SNI ServerName")
+	cmd.Flags().StringP("host", "a", "", "HTTP Host / :authority header")
 	cmd.Flags().StringP("path", "p", "/", "HTTP path to request")
 	cmd.Flags().Duration("timeout", 5*time.Second, "Timeout for each individual network operation")
 	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
 
 	/* Output */
 	cmd.Flags().BoolP("dns", "d", false, "Show detailed DNS testing for the given addr (note: this is just indicative; the system resolver is used to make the actual connection)")
-	cmd.Flags().BoolP("tls", "t", true, "Print important agreed TLS parameters")
+	cmd.Flags().BoolP("dns-full", "D", false, "Show detailed DNS testing for the given addr (note: this is just indicative; the system resolver is used to make the actual connection)")
+	cmd.Flags().BoolP("tls", "t", false, "Print important agreed TLS parameters")
 	cmd.Flags().BoolP("tls-full", "T", false, "Print all agreed TLS parameters")
-	cmd.Flags().BoolP("head", "m", true, "Print important HTTP response metadata")
+	cmd.Flags().BoolP("head", "m", false, "Print important HTTP response metadata")
 	cmd.Flags().BoolP("head-full", "M", false, "Print all HTTP response metadata")
-	cmd.Flags().BoolP("body", "b", false, "Print truncated HTTP response body")
-	cmd.Flags().BoolP("body-full", "B", false, "Print full HTTP response body")
 
 	/* TLS and auth */
 	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate file")
@@ -72,28 +72,52 @@ func appMain(cmd *cobra.Command, args []string) {
 	daemonData := state.NewDaemonData()
 
 	/* Reference server */
-	refName := args[0]
-	refIp := net.ParseIP(refName)
+	refTarget := args[0]
 	refPort, err := strconv.ParseUint(args[1], 10, 16)
 	b.CheckErr(err)
 	/* Comparison */
-	newIp := net.ParseIP(args[2])
+	newTarget := args[2]
 	newPort, err := strconv.ParseUint(args[3], 10, 16)
 	b.CheckErr(err)
 	/* Common */
 	scheme := args[4]
-
-	if newIp == nil {
-		b.CheckErr(fmt.Errorf("invalid IP: %s", args[2]))
-	}
 	if !(scheme == "http" || scheme == "https") {
 		b.CheckErr(fmt.Errorf("unknown scheme: %s", scheme))
 	}
 
 	daemonData.Timeout = viper.GetDuration("timeout")
+	daemonData.DnsSystemResolver = probes.DnsResolverName
 
-	daemonData.TlsServerName = refName
-	daemonData.HttpHost = refName
+	// TODO: think about this. Compar doen't take --host or --sni, but maybe it should (would only need one value, not for both sides)
+	// - but for now we just use the ref's name. This means ref must NOT be an IP (or if it is, don't use as SNI)
+	// - new can actually be IP or name (will be called as ref name)
+	// Update: yes, this should take --sni and --host. ref and new can be names/IPs, pass them to exactly the same functions as << (and build one dD between them - dD is written in nasty places, check that out cause it won't work)
+	daemonData.HttpHost = viper.GetString("host")
+	if daemonData.HttpHost == "" {
+		// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
+		if refPort == 80 || refPort == 443 {
+			daemonData.HttpHost = refTarget // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
+		} else {
+			daemonData.HttpHost = net.JoinHostPort(refTarget, strconv.FormatUint(refPort, 10))
+		}
+	}
+
+	// RFC 6066 §3 (https://www.rfc-editor.org/rfc/rfc6066)
+	// - DNS names only
+	// - No ports
+	// - No literal IPs
+	daemonData.TlsServerName = viper.GetString("sni")
+	if daemonData.TlsServerName == "" {
+		// If SNI isn't explicitly set, try to do something useful by falling back to the specified HTTP Host
+		// Can only use explicit Hosts, not one we've derived (which could contain a port and/or could be an IP), or target (which could be an IP)
+		daemonData.TlsServerName = viper.GetString("host")
+	}
+
+	// Name to validate received certs against - fall back some non-empty string, even if it is an IP
+	daemonData.TlsValidateName = daemonData.TlsServerName
+	if daemonData.TlsValidateName == "" {
+		daemonData.TlsValidateName = refTarget
+	}
 
 	daemonData.HttpMethod = "GET"
 
@@ -121,40 +145,52 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	/* Begin */
 
-	fmt.Printf("Testing new IP %v against reference host %v\n", s.Addr(newIp.String()), s.Addr(daemonData.HttpHost))
+	fmt.Printf("Testing new host %v against reference host %v\n", s.Addr(newTarget), s.Addr(refTarget))
 
 	/* Check reference */
 
 	b.Banner("Reference host")
-	refBody := doChecks(s, b, scheme, refName, refIp, refPort, daemonData)
+
+	refProbeData := state.NewProbeData()
+	probes.Probe(s, b, daemonData, refProbeData, scheme, refTarget, refPort, viper.GetString("path"), true)
+
+	refProbeData.Print(
+		s, b,
+		daemonData,
+		// TODO: if none of these are set, default to dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
+		viper.GetBool("dns"), viper.GetBool("dns-full"),
+		viper.GetBool("tls"), viper.GetBool("tls-full"),
+		viper.GetBool("head"), viper.GetBool("head-full"),
+		viper.GetBool("body"), viper.GetBool("body-full"),
+		// TODO: make printing of request info optional (can be inferred from the args but can be useful to have it spelled out)
+		// TODO: make it possible to turn b.Trace output on/off
+	)
 
 	/* Check new */
 
 	b.Banner("New IP")
-	newBody := doChecks(s, b, scheme, newIp.String(), newIp, newPort, daemonData)
+
+	newProbeData := state.NewProbeData()
+	probes.Probe(s, b, daemonData, newProbeData, scheme, newTarget, newPort, viper.GetString("path"), true)
+
+	newProbeData.Print(
+		s, b,
+		daemonData,
+		// TODO: if none of these are set, default to dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
+		viper.GetBool("dns"), viper.GetBool("dns-full"),
+		viper.GetBool("tls"), viper.GetBool("tls-full"),
+		viper.GetBool("head"), viper.GetBool("head-full"),
+		viper.GetBool("body"), viper.GetBool("body-full"),
+		// TODO: make printing of request info optional (can be inferred from the args but can be useful to have it spelled out)
+		// TODO: make it possible to turn b.Trace output on/off
+	)
 
 	/* Body diff */
 
-	b.Banner("Differences")
+	b.Banner("Body Differences")
 
-	if viper.GetBool("body") || viper.GetBool("body-full") {
-		fmt.Println()
-		fmt.Println("NEW response body:")
-
-		bodyLen := len(newBody)
-		printLen := usvc.MinInt(bodyLen, 72)
-		if viper.GetBool("body-full") {
-			printLen = bodyLen
-		}
-
-		fmt.Printf("%v", string(newBody[0:printLen])) // assumes utf8
-		if bodyLen > printLen {
-			fmt.Printf("<%d bytes elided>", bodyLen-printLen)
-		}
-		if bodyLen > 0 {
-			fmt.Println()
-		}
-	}
+	refBody := refProbeData.BodyBytes
+	newBody := newProbeData.BodyBytes
 
 	if !utf8.Valid(refBody) || !utf8.Valid(newBody) {
 		b.PrintWarn("one or more response bodies aren't valid utf-8; diff engine might do unexpected things")
@@ -162,63 +198,14 @@ func appMain(cmd *cobra.Command, args []string) {
 	differ := dmp.New()
 	diffs := differ.DiffMain(string(refBody), string(newBody), true)
 
-	if !(len(diffs) == 1 && diffs[0].Type == dmp.DiffEqual) {
+	if len(diffs) == 1 && diffs[0].Type == dmp.DiffEqual {
+		b.PrintInfo("response bodies equal")
+	} else {
 		b.PrintWarn("response bodies differ")
 		fmt.Println(differ.DiffPrettyText(diffs))
-	} else {
-		b.PrintInfo("response bodies equal")
 	}
-
-	/* Fin */
-
-	fmt.Println()
-	fmt.Println()
 
 	os.Exit(0)
-}
-
-func doChecks(s output.TtyStyler, b output.Bios, scheme string, targetName string, targetIP net.IP, port uint64, daemonData *state.DaemonData) (body []byte) {
-	if viper.GetBool("dns") {
-		probes.DNSInfo(s, b, viper.GetDuration("timeout"), targetName)
-	}
-
-	probeData := state.NewProbeData()
-
-	switch scheme {
-	case "http":
-		client := probes.GetPlaintextClient(s, b, daemonData, probeData)
-		req, cancel := probes.GetHTTPRequest(
-			s, b,
-			scheme, targetIP, port, viper.GetString("path"),
-			daemonData,
-		)
-		defer cancel()
-		// TODO: better name: doesn't always do TLS
-		body = probes.CheckTLS(
-			s, b,
-			client, req,
-			probeData,
-		)
-	case "https":
-		client := probes.GetTLSClient(
-			s, b,
-			daemonData,
-			probeData,
-		)
-		req, cancel := probes.GetHTTPRequest(
-			s, b,
-			scheme, targetIP, port, viper.GetString("path"),
-			daemonData,
-		)
-		defer cancel()
-		body = probes.CheckTLS(
-			s, b,
-			client, req,
-			probeData,
-		)
-	}
-
-	return
 }
 
 /*
