@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -41,7 +40,7 @@ func main() {
 	}
 
 	/* Request */
-	cmd.Flags().StringP("sni", "s", "", "SNI ServerName")
+	cmd.Flags().StringP("sni", "s", "", "TLS SNI ServerName")
 	cmd.Flags().StringP("host", "a", "", "HTTP Host / :authority header")
 	cmd.Flags().StringP("path", "p", "/", "HTTP path to request")
 	cmd.Flags().Duration("timeout", 5*time.Second, "Timeout for each individual network operation")
@@ -78,8 +77,6 @@ func main() {
 func appMain(cmd *cobra.Command, args []string) {
 
 	// Need arch:
-	// - first thing to do is to make it build into an output object a la http-log.
-	// - move golang resolver to DNS etc
 	// - commander object that run a probe. Needs to be able to re-enter itself for redirects. Also needs to be drivable eg from a cli that runs it every 5s
 	// - needs an actual -L / --follow-redirects CLI option
 	// - "arg" stuff like TLS certs shouldn't be re-loaded, and tty stylers shouldn't be re-made, but state-holding objects should be new
@@ -89,16 +86,18 @@ func appMain(cmd *cobra.Command, args []string) {
 	s := output.NewTtyStyler(aurora.NewAurora(true))
 	b := output.NewTtyBios(s)
 
+	// TODO: all arg parsing to a fn mapping args[] (& viper) to daemonData
+
 	daemonData := state.NewDaemonData()
-	probeData := state.NewProbeData()
 
 	/* Deal with args */
+	// TODO: factor this out to internal/ and share with compar
 
 	target := args[0]
-	targetIP := probes.ResolveSystemDNS(b, target, probeData)
 	port, err := strconv.ParseUint(args[1], 10, 16)
 	b.CheckErr(err)
 	// TODO: turn this into a --no-tls arg
+	// - then test all print flags with --no-tls
 	scheme := args[2]
 	if !(scheme == "http" || scheme == "https") {
 		b.CheckErr(fmt.Errorf("unknown scheme: %s", scheme))
@@ -162,35 +161,12 @@ func appMain(cmd *cobra.Command, args []string) {
 		daemonData.AuthBearerToken = strings.TrimSpace(string(bytes))
 	}
 
-	/* Build clients */
-
-	var client *http.Client
-	switch scheme {
-	case "http":
-		client = probes.GetPlaintextClient(
-			s, b,
-			daemonData, probeData,
-		)
-	case "https":
-		daemonData.TlsEnabled = true
-		client = probes.GetTLSClient(
-			s, b,
-			daemonData, probeData,
-		)
-	}
-
-	req, cancel := probes.GetHTTPRequest(
-		s, b,
-		scheme, targetIP, port, viper.GetString("path"),
-		daemonData,
-	)
-	defer cancel()
-
 	/* Execute */
 
-	if viper.GetBool("dns-full") {
-		probes.DNSInfo(s, b, viper.GetDuration("timeout"), target)
-	}
+	probeData := state.NewProbeData()
+	probes.Probe(s, b, daemonData, probeData, scheme, target, port, viper.GetString("path"), viper.GetBool("body") || viper.GetBool("body-full"))
+
+	/* Print */
 
 	// TODO: passing [tls,head][-full] into these functions is hideous.
 	// This needs an outputter like http-log's (shouldn't share/duplicate any code but will use a lot of high-level stuff from the styler like styleHeaderArray())
@@ -200,14 +176,6 @@ func appMain(cmd *cobra.Command, args []string) {
 	// - it can be clever and eg use hsts info from http header in the TLS output section
 	// - make sure the controlflow is such that this is always called to do what it can no matter if we bail out on an abort or an error
 	// - can do other clever stuff like (in http-log) not printing SNI in tls-agreed if we have the tls-negotiation flag set because that will have done it
-	probes.CheckTLS(
-		s, b,
-		client, req,
-		viper.GetBool("body") || viper.GetBool("body-full"),
-		probeData,
-	)
-
-	/* Print */
 
 	probeData.Print(
 		s, b,

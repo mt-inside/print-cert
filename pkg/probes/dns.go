@@ -9,16 +9,25 @@ import (
 	"github.com/miekg/dns"
 	"github.com/peterzen/goresolver"
 
-	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/print-cert/pkg/state"
+
+	"github.com/mt-inside/http-log/pkg/output"
 )
 
-func ResolveSystemDNS(b output.Bios, addr string, probeData *state.ProbeData) net.IP {
+func dnsSystem(
+	s output.TtyStyler,
+	b output.Bios,
+	daemonData *state.DaemonData,
+	probeData *state.ProbeData,
+	addr string,
+) net.IP {
 	// TODO: doc DNS: to actually connect, We use system, always select one so we can say which one. CGO uses getaddrinfo(). Go-native looks in DNS and also reads /etc/hosts (LookupAddr and LookupIP now equivalent except signature)
 	// https://golang-nuts.narkive.com/s2corx0l/go-nuts-net-lookuphost-vs-net-lookupip
+	// FIXME: what if it's an IP. Check Manual
 	ips, err := net.LookupIP(addr)
 	b.CheckErr(err)
 	probeData.DnsSystemResolves = ips
+
 	ip := ips[0]
 	b.Trace("Connection will use first-returned system-resolved IP: %s", ip)
 
@@ -32,23 +41,29 @@ func ResolveSystemDNS(b output.Bios, addr string, probeData *state.ProbeData) ne
  * - This is what we want, because we also get files etc and anything else they've added into nsswitch
  * Downside is we can't stop it trying localhost.$domain, because it doesn't know "localhost" is special - it's only special cause it's in /etc/hosts, and we can't avoid the fact that a lot of DNS servers respond for localhost.foo. when they shouldn't
  */
-func DNSInfo(s output.TtyStyler, b output.Bios, timeout time.Duration, addr string) {
+func dnsManual(
+	s output.TtyStyler,
+	b output.Bios,
+	daemonData *state.DaemonData,
+	probeData *state.ProbeData,
+	addr string,
+) {
 	// TODO: move printing to the printer
 	b.Banner("DNS - extra manual resolution (information only)")
 
 	ip := net.ParseIP(addr)
 	if ip == nil {
-		ips, fqdn := queryDNS(s, b, timeout, addr)
+		ips, fqdn := queryDNS(s, b, daemonData.Timeout, addr)
 		for _, ip := range ips {
-			revNames := queryRevDNS(s, b, timeout, ip)
+			revNames := queryRevDNS(s, b, daemonData.Timeout, ip)
 			if len(revNames) > 0 {
 				checkDNSConsistent(s, b, fqdn, revNames)
 			}
 		}
 	} else {
-		names := queryRevDNS(s, b, timeout, ip)
+		names := queryRevDNS(s, b, daemonData.Timeout, ip)
 		for _, name := range names {
-			ips, _ := queryDNS(s, b, timeout, name)
+			ips, _ := queryDNS(s, b, daemonData.Timeout, name)
 			if len(ips) > 0 {
 				checkRevDNSConsistent(s, b, ip, ips)
 			}

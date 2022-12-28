@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// TODO: rename me RequestData
 type DaemonData struct {
 	Timeout time.Duration
 
