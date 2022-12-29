@@ -15,18 +15,18 @@ import (
 func buildPlaintextClient(
 	s output.TtyStyler,
 	b output.Bios,
-	daemonData *state.DaemonData,
-	probeData *state.ProbeData,
+	requestData *state.RequestData,
+	responseData *state.ResponseData,
 ) *http.Client {
 	c := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				dialer := &net.Dialer{
-					Timeout:   daemonData.Timeout,
+					Timeout:   requestData.Timeout,
 					KeepAlive: 60 * time.Second,
 					// Note: happens "after creating the network connection but before actually dialing."
 					Control: func(network, address string, rawConn syscall.RawConn) error {
-						probeData.TransportDialTime = time.Now()
+						responseData.TransportDialTime = time.Now()
 						b.Trace("Dialing", "addr", address)
 
 						return nil
@@ -36,18 +36,18 @@ func buildPlaintextClient(
 				b.CheckErr(err)
 				b.Trace("Connected", "to", conn.RemoteAddr(), "from", conn.LocalAddr())
 
-				probeData.TransportConnTime = time.Now()
-				probeData.TransportLocalAddr = conn.LocalAddr()
-				probeData.TransportRemoteAddr = conn.RemoteAddr()
+				responseData.TransportConnTime = time.Now()
+				responseData.TransportLocalAddr = conn.LocalAddr()
+				responseData.TransportRemoteAddr = conn.RemoteAddr()
 
 				return conn, err
 			},
-			ResponseHeaderTimeout: daemonData.Timeout,
+			ResponseHeaderTimeout: requestData.Timeout,
 			DisableCompression:    true,
 		},
 	}
 
-	c.CheckRedirect = getCheckRedirect(s, b, daemonData, c)
+	c.CheckRedirect = getCheckRedirect(s, b, requestData, c)
 
 	return c
 }

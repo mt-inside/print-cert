@@ -7,8 +7,7 @@ import (
 	"time"
 )
 
-// TODO: rename me RequestData
-type DaemonData struct {
+type RequestData struct {
 	Timeout time.Duration
 
 	DnsSystemResolver string
@@ -30,6 +29,6 @@ type DaemonData struct {
 	AuthBearerToken string
 }
 
-func NewDaemonData() *DaemonData {
-	return &DaemonData{}
+func NewRequestData() *RequestData {
+	return &RequestData{}
 }
