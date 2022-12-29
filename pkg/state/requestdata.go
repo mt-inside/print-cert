@@ -44,6 +44,9 @@ func RequestDataFromViper(s output.TtyStyler, b output.Bios, target string, port
 	requestData.Timeout = viper.GetDuration("timeout")
 	requestData.DnsSystemResolver = dnsResolverName
 
+	// HTTP/1.1 Host. Either:
+	// - explicitly given value, or
+	// - connection target, be that name or IP, with non-standard ports appended
 	requestData.HttpHost = viper.GetString("host")
 	if requestData.HttpHost == "" {
 		// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
@@ -54,15 +57,47 @@ func RequestDataFromViper(s output.TtyStyler, b output.Bios, target string, port
 		}
 	}
 
+	// TLS SNI ServerName field. Optional.
 	// RFC 6066 §3 (https://www.rfc-editor.org/rfc/rfc6066)
 	// - DNS names only
 	// - No ports
 	// - No literal IPs
+	// Thus either:
+	// - explicitly given value, if conformant
+	// - HTTP Host value (ie explicit or target), if conformant
+	serverNameConformant := func(sn string) bool {
+		// No IPs
+		if ip := net.ParseIP(sn); ip != nil {
+			return false
+		}
+		// No ports
+		if _, _, err := net.SplitHostPort(sn); err == nil {
+			return false
+		}
+		return true
+	}
 	requestData.TlsServerName = viper.GetString("sni")
+	if requestData.TlsServerName != "" {
+		if !serverNameConformant(requestData.TlsServerName) {
+			b.PrintErr("SNI ServerName cannot be an IP or contain a port number. Ignoring supplied value.")
+			requestData.TlsServerName = ""
+		}
+	}
 	if requestData.TlsServerName == "" {
-		// If SNI isn't explicitly set, try to do something useful by falling back to the specified HTTP Host
-		// Can only use explicit Hosts, not one we've derived (which could contain a port and/or could be an IP), or target (which could be an IP)
 		requestData.TlsServerName = viper.GetString("host")
+		if requestData.TlsServerName != "" {
+			if !serverNameConformant(requestData.TlsServerName) {
+				requestData.TlsServerName = ""
+			}
+		}
+	}
+	if requestData.TlsServerName == "" {
+		requestData.TlsServerName = target
+		if requestData.TlsServerName != "" {
+			if !serverNameConformant(requestData.TlsServerName) {
+				requestData.TlsServerName = ""
+			}
+		}
 	}
 
 	// Name to validate received certs against - fall back some non-empty string, even if it is an IP
