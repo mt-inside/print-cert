@@ -82,14 +82,14 @@ func appMain(cmd *cobra.Command, args []string) {
 	// - needs an actual -L / --follow-redirects CLI option
 	// - "arg" stuff like TLS certs shouldn't be re-loaded, and tty stylers shouldn't be re-made, but state-holding objects should be new
 	// - but target IP and port need to be changable (so they can be given from whatever DNS system in chosen ,and also varied by the compare front-end)
-	// - factor to Plaintext and TLS prober (same object as probeData). Construct over daemonData? internal methods to get transport, client, etc. Interface for Probe(), Print()
+	// - factor to Plaintext and TLS prober (same object as responseData). Construct over requestData? internal methods to get transport, client, etc. Interface for Probe(), Print()
 
 	s := output.NewTtyStyler(aurora.NewAurora(true))
 	b := output.NewTtyBios(s)
 
-	// TODO: all arg parsing to a fn mapping args[] (& viper) to daemonData
+	// TODO: all arg parsing to a fn mapping args[] (& viper) to requestData
 
-	daemonData := state.NewDaemonData()
+	requestData := state.NewRequestData()
 
 	/* Deal with args */
 	// TODO: factor this out to internal/ and share with compar
@@ -99,16 +99,16 @@ func appMain(cmd *cobra.Command, args []string) {
 	b.CheckErr(err)
 	// TODO test all print flags with --no-tls
 
-	daemonData.Timeout = viper.GetDuration("timeout")
-	daemonData.DnsSystemResolver = probes.DnsResolverName
+	requestData.Timeout = viper.GetDuration("timeout")
+	requestData.DnsSystemResolver = probes.DnsResolverName
 
-	daemonData.HttpHost = viper.GetString("host")
-	if daemonData.HttpHost == "" {
+	requestData.HttpHost = viper.GetString("host")
+	if requestData.HttpHost == "" {
 		// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
 		if port == 80 || port == 443 {
-			daemonData.HttpHost = target // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
+			requestData.HttpHost = target // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
 		} else {
-			daemonData.HttpHost = net.JoinHostPort(target, strconv.FormatUint(port, 10))
+			requestData.HttpHost = net.JoinHostPort(target, strconv.FormatUint(port, 10))
 		}
 	}
 
@@ -116,37 +116,37 @@ func appMain(cmd *cobra.Command, args []string) {
 	// - DNS names only
 	// - No ports
 	// - No literal IPs
-	daemonData.TlsServerName = viper.GetString("sni")
-	if daemonData.TlsServerName == "" {
+	requestData.TlsServerName = viper.GetString("sni")
+	if requestData.TlsServerName == "" {
 		// If SNI isn't explicitly set, try to do something useful by falling back to the specified HTTP Host
 		// Can only use explicit Hosts, not one we've derived (which could contain a port and/or could be an IP), or target (which could be an IP)
-		daemonData.TlsServerName = viper.GetString("host")
+		requestData.TlsServerName = viper.GetString("host")
 	}
 
 	// Name to validate received certs against - fall back some non-empty string, even if it is an IP
-	daemonData.TlsValidateName = daemonData.TlsServerName
-	if daemonData.TlsValidateName == "" {
-		daemonData.TlsValidateName = target
+	requestData.TlsValidateName = requestData.TlsServerName
+	if requestData.TlsValidateName == "" {
+		requestData.TlsValidateName = target
 	}
 
-	daemonData.TlsEnabled = !viper.GetBool("no-tls")
-	daemonData.HttpMethod = "GET"
+	requestData.TlsEnabled = !viper.GetBool("no-tls")
+	requestData.HttpMethod = "GET"
 
-	daemonData.AuthKrb = viper.GetBool("kerberos")
-	daemonData.HttpForce11 = viper.GetBool("http-11")
+	requestData.AuthKrb = viper.GetBool("kerberos")
+	requestData.HttpForce11 = viper.GetBool("http-11")
 
 	/* Load TLS material */
 
 	if viper.Get("cert") != "" || viper.Get("key") != "" {
 		pair, err := tls.LoadX509KeyPair(viper.Get("cert").(string), viper.Get("key").(string))
 		b.CheckErr(err)
-		daemonData.TlsClientPair = &pair
+		requestData.TlsClientPair = &pair
 	}
 
 	if viper.Get("ca") != "" {
 		bytes, err := os.ReadFile(viper.Get("ca").(string))
 		b.CheckErr(err)
-		daemonData.TlsServingCA, err = codec.ParseCertificate(bytes)
+		requestData.TlsServingCA, err = codec.ParseCertificate(bytes)
 		b.CheckErr(err)
 	}
 
@@ -155,13 +155,13 @@ func appMain(cmd *cobra.Command, args []string) {
 	if viper.Get("bearer") != "" {
 		bytes, err := os.ReadFile(viper.Get("bearer").(string))
 		b.CheckErr(err)
-		daemonData.AuthBearerToken = strings.TrimSpace(string(bytes))
+		requestData.AuthBearerToken = strings.TrimSpace(string(bytes))
 	}
 
 	/* Execute */
 
-	probeData := state.NewProbeData()
-	probes.Probe(s, b, daemonData, probeData, target, port, viper.GetString("path"), viper.GetBool("body") || viper.GetBool("body-full"))
+	responseData := state.NewResponseData()
+	probes.Probe(s, b, requestData, responseData, target, port, viper.GetString("path"), viper.GetBool("dns") || viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
 
 	/* Print */
 
@@ -174,9 +174,9 @@ func appMain(cmd *cobra.Command, args []string) {
 	// - make sure the controlflow is such that this is always called to do what it can no matter if we bail out on an abort or an error
 	// - can do other clever stuff like (in http-log) not printing SNI in tls-agreed if we have the tls-negotiation flag set because that will have done it
 
-	probeData.Print(
+	responseData.Print(
 		s, b,
-		daemonData,
+		requestData,
 		// TODO: if none of these are set, default to dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
 		viper.GetBool("dns"), viper.GetBool("dns-full"),
 		viper.GetBool("tls"), viper.GetBool("tls-full"),

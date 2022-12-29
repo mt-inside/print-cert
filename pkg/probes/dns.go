@@ -17,8 +17,8 @@ import (
 func dnsSystem(
 	s output.TtyStyler,
 	b output.Bios,
-	daemonData *state.DaemonData,
-	probeData *state.ProbeData,
+	requestData *state.RequestData,
+	responseData *state.ResponseData,
 	addr string,
 ) net.IP {
 	// TODO: doc DNS: to actually connect, We use system, always select one so we can say which one. CGO uses getaddrinfo(). Go-native looks in DNS and also reads /etc/hosts (LookupAddr and LookupIP now equivalent except signature)
@@ -27,12 +27,12 @@ func dnsSystem(
 	if ip != nil {
 		names, err := net.LookupAddr(ip.String())
 		b.CheckErr(err)
-		probeData.DnsSystemResolves = names
+		responseData.DnsSystemResolves = names
 		b.Trace("Provided target %s is already an IP.", ip)
 	} else {
 		ips, err := net.LookupIP(addr)
 		b.CheckErr(err)
-		probeData.DnsSystemResolves = utils.MapToString(ips)
+		responseData.DnsSystemResolves = utils.MapToString(ips)
 		ip = ips[0]
 		b.Trace("Connection will use first-returned system-resolved IP: %s", ip)
 	}
@@ -47,31 +47,32 @@ func dnsSystem(
  * - This is what we want, because we also get files etc and anything else they've added into nsswitch
  * Downside is we can't stop it trying localhost.$domain, because it doesn't know "localhost" is special - it's only special cause it's in /etc/hosts, and we can't avoid the fact that a lot of DNS servers respond for localhost.foo. when they shouldn't
  */
+// FIXME: blows up when there's no internet (ie responses are empty / nil)
 func dnsManual(
 	s output.TtyStyler,
 	b output.Bios,
-	daemonData *state.DaemonData,
-	probeData *state.ProbeData,
+	requestData *state.RequestData,
+	responseData *state.ResponseData,
 	addr string,
 ) {
-	// Ideally we'd save all this info in probeData and then print in Print(), but it's a lot of effort and this always runs in a separate phase
+	// Ideally we'd save all this info in responseData and then print in Print(), but it's a lot of effort and this always runs in a separate phase
 	b.Banner("DNS - extra manual resolution (information only)")
 
 	ip := net.ParseIP(addr)
 	if ip != nil {
 		// It's an IP: do reverse lookup
-		names := queryRevDNS(s, b, daemonData.Timeout, ip)
+		names := queryRevDNS(s, b, requestData.Timeout, ip)
 		for _, name := range names {
-			ips, _ := queryDNS(s, b, daemonData.Timeout, name)
+			ips, _ := queryDNS(s, b, requestData.Timeout, name)
 			if len(ips) > 0 {
 				checkRevDNSConsistent(s, b, ip, ips)
 			}
 		}
 	} else {
 		// It's not an IP; assume it's a name: do forwards lookup
-		ips, fqdn := queryDNS(s, b, daemonData.Timeout, addr)
+		ips, fqdn := queryDNS(s, b, requestData.Timeout, addr)
 		for _, ip := range ips {
-			revNames := queryRevDNS(s, b, daemonData.Timeout, ip)
+			revNames := queryRevDNS(s, b, requestData.Timeout, ip)
 			if len(revNames) > 0 {
 				checkDNSConsistent(s, b, fqdn, revNames)
 			}

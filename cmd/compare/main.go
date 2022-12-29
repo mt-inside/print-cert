@@ -70,7 +70,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	s := output.NewTtyStyler(aurora.NewAurora(true))
 	b := output.NewTtyBios(s)
 
-	daemonData := state.NewDaemonData()
+	requestData := state.NewRequestData()
 
 	/* Reference server */
 	refTarget := args[0]
@@ -81,20 +81,20 @@ func appMain(cmd *cobra.Command, args []string) {
 	newPort, err := strconv.ParseUint(args[3], 10, 16)
 	b.CheckErr(err)
 
-	daemonData.Timeout = viper.GetDuration("timeout")
-	daemonData.DnsSystemResolver = probes.DnsResolverName
+	requestData.Timeout = viper.GetDuration("timeout")
+	requestData.DnsSystemResolver = probes.DnsResolverName
 
 	// TODO: think about this. Compar doen't take --host or --sni, but maybe it should (would only need one value, not for both sides)
 	// - but for now we just use the ref's name. This means ref must NOT be an IP (or if it is, don't use as SNI)
 	// - new can actually be IP or name (will be called as ref name)
 	// Update: yes, this should take --sni and --host. ref and new can be names/IPs, pass them to exactly the same functions as << (and build one dD between them - dD is written in nasty places, check that out cause it won't work)
-	daemonData.HttpHost = viper.GetString("host")
-	if daemonData.HttpHost == "" {
+	requestData.HttpHost = viper.GetString("host")
+	if requestData.HttpHost == "" {
 		// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
 		if refPort == 80 || refPort == 443 {
-			daemonData.HttpHost = refTarget // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
+			requestData.HttpHost = refTarget // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
 		} else {
-			daemonData.HttpHost = net.JoinHostPort(refTarget, strconv.FormatUint(refPort, 10))
+			requestData.HttpHost = net.JoinHostPort(refTarget, strconv.FormatUint(refPort, 10))
 		}
 	}
 
@@ -102,42 +102,42 @@ func appMain(cmd *cobra.Command, args []string) {
 	// - DNS names only
 	// - No ports
 	// - No literal IPs
-	daemonData.TlsServerName = viper.GetString("sni")
-	if daemonData.TlsServerName == "" {
+	requestData.TlsServerName = viper.GetString("sni")
+	if requestData.TlsServerName == "" {
 		// If SNI isn't explicitly set, try to do something useful by falling back to the specified HTTP Host
 		// Can only use explicit Hosts, not one we've derived (which could contain a port and/or could be an IP), or target (which could be an IP)
-		daemonData.TlsServerName = viper.GetString("host")
+		requestData.TlsServerName = viper.GetString("host")
 	}
 
 	// Name to validate received certs against - fall back some non-empty string, even if it is an IP
-	daemonData.TlsValidateName = daemonData.TlsServerName
-	if daemonData.TlsValidateName == "" {
-		daemonData.TlsValidateName = refTarget
+	requestData.TlsValidateName = requestData.TlsServerName
+	if requestData.TlsValidateName == "" {
+		requestData.TlsValidateName = refTarget
 	}
 
-	daemonData.TlsEnabled = !viper.GetBool("no-tls")
-	daemonData.HttpMethod = "GET"
+	requestData.TlsEnabled = !viper.GetBool("no-tls")
+	requestData.HttpMethod = "GET"
 
-	daemonData.AuthKrb = viper.GetBool("kerberos")
-	daemonData.HttpForce11 = viper.GetBool("http-11")
+	requestData.AuthKrb = viper.GetBool("kerberos")
+	requestData.HttpForce11 = viper.GetBool("http-11")
 
 	if viper.Get("cert") != "" || viper.Get("key") != "" {
 		pair, err := tls.LoadX509KeyPair(viper.Get("cert").(string), viper.Get("key").(string))
 		b.CheckErr(err)
-		daemonData.TlsClientPair = &pair
+		requestData.TlsClientPair = &pair
 	}
 
 	if viper.Get("ca") != "" {
 		bytes, err := os.ReadFile(viper.Get("ca").(string))
 		b.CheckErr(err)
-		daemonData.TlsServingCA, err = codec.ParseCertificate(bytes)
+		requestData.TlsServingCA, err = codec.ParseCertificate(bytes)
 		b.CheckErr(err)
 	}
 
 	if viper.Get("bearer") != "" {
 		bytes, err := os.ReadFile(viper.Get("bearer").(string))
 		b.CheckErr(err)
-		daemonData.AuthBearerToken = strings.TrimSpace(string(bytes))
+		requestData.AuthBearerToken = strings.TrimSpace(string(bytes))
 	}
 
 	/* Begin */
@@ -148,12 +148,12 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	b.Banner("Reference host")
 
-	refProbeData := state.NewProbeData()
-	probes.Probe(s, b, daemonData, refProbeData, refTarget, refPort, viper.GetString("path"), true)
+	refResponseData := state.NewResponseData()
+	probes.Probe(s, b, requestData, refResponseData, refTarget, refPort, viper.GetString("path"), viper.GetBool("dns") || viper.GetBool("dns-full"), true)
 
-	refProbeData.Print(
+	refResponseData.Print(
 		s, b,
-		daemonData,
+		requestData,
 		// TODO: if none of these are set, default to dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
 		viper.GetBool("dns"), viper.GetBool("dns-full"),
 		viper.GetBool("tls"), viper.GetBool("tls-full"),
@@ -167,12 +167,12 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	b.Banner("New IP")
 
-	newProbeData := state.NewProbeData()
-	probes.Probe(s, b, daemonData, newProbeData, newTarget, newPort, viper.GetString("path"), true)
+	newResponseData := state.NewResponseData()
+	probes.Probe(s, b, requestData, newResponseData, newTarget, newPort, viper.GetString("path"), viper.GetBool("dns") || viper.GetBool("dns-full"), true)
 
-	newProbeData.Print(
+	newResponseData.Print(
 		s, b,
-		daemonData,
+		requestData,
 		// TODO: if none of these are set, default to dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
 		viper.GetBool("dns"), viper.GetBool("dns-full"),
 		viper.GetBool("tls"), viper.GetBool("tls-full"),
@@ -186,8 +186,8 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	b.Banner("Body Differences")
 
-	refBody := refProbeData.BodyBytes
-	newBody := newProbeData.BodyBytes
+	refBody := refResponseData.BodyBytes
+	newBody := newResponseData.BodyBytes
 
 	if !utf8.Valid(refBody) || !utf8.Valid(newBody) {
 		b.PrintWarn("one or more response bodies aren't valid utf-8; diff engine might do unexpected things")
