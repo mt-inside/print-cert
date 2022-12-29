@@ -9,9 +9,10 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/mt-inside/print-cert/pkg/state"
+
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/utils"
-	"github.com/mt-inside/print-cert/pkg/state"
 )
 
 // two objects

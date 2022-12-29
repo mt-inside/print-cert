@@ -1,13 +1,10 @@
 package main
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -19,7 +16,6 @@ import (
 	"github.com/mt-inside/print-cert/pkg/probes"
 	"github.com/mt-inside/print-cert/pkg/state"
 
-	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
@@ -70,8 +66,6 @@ func appMain(cmd *cobra.Command, args []string) {
 	s := output.NewTtyStyler(aurora.NewAurora(true))
 	b := output.NewTtyBios(s)
 
-	requestData := state.NewRequestData()
-
 	/* Reference server */
 	refTarget := args[0]
 	refPort, err := strconv.ParseUint(args[1], 10, 16)
@@ -81,64 +75,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	newPort, err := strconv.ParseUint(args[3], 10, 16)
 	b.CheckErr(err)
 
-	requestData.Timeout = viper.GetDuration("timeout")
-	requestData.DnsSystemResolver = probes.DnsResolverName
-
-	// TODO: think about this. Compar doen't take --host or --sni, but maybe it should (would only need one value, not for both sides)
-	// - but for now we just use the ref's name. This means ref must NOT be an IP (or if it is, don't use as SNI)
-	// - new can actually be IP or name (will be called as ref name)
-	// Update: yes, this should take --sni and --host. ref and new can be names/IPs, pass them to exactly the same functions as << (and build one dD between them - dD is written in nasty places, check that out cause it won't work)
-	requestData.HttpHost = viper.GetString("host")
-	if requestData.HttpHost == "" {
-		// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
-		if refPort == 80 || refPort == 443 {
-			requestData.HttpHost = refTarget // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
-		} else {
-			requestData.HttpHost = net.JoinHostPort(refTarget, strconv.FormatUint(refPort, 10))
-		}
-	}
-
-	// RFC 6066 §3 (https://www.rfc-editor.org/rfc/rfc6066)
-	// - DNS names only
-	// - No ports
-	// - No literal IPs
-	requestData.TlsServerName = viper.GetString("sni")
-	if requestData.TlsServerName == "" {
-		// If SNI isn't explicitly set, try to do something useful by falling back to the specified HTTP Host
-		// Can only use explicit Hosts, not one we've derived (which could contain a port and/or could be an IP), or target (which could be an IP)
-		requestData.TlsServerName = viper.GetString("host")
-	}
-
-	// Name to validate received certs against - fall back some non-empty string, even if it is an IP
-	requestData.TlsValidateName = requestData.TlsServerName
-	if requestData.TlsValidateName == "" {
-		requestData.TlsValidateName = refTarget
-	}
-
-	requestData.TlsEnabled = !viper.GetBool("no-tls")
-	requestData.HttpMethod = "GET"
-
-	requestData.AuthKrb = viper.GetBool("kerberos")
-	requestData.HttpForce11 = viper.GetBool("http-11")
-
-	if viper.Get("cert") != "" || viper.Get("key") != "" {
-		pair, err := tls.LoadX509KeyPair(viper.Get("cert").(string), viper.Get("key").(string))
-		b.CheckErr(err)
-		requestData.TlsClientPair = &pair
-	}
-
-	if viper.Get("ca") != "" {
-		bytes, err := os.ReadFile(viper.Get("ca").(string))
-		b.CheckErr(err)
-		requestData.TlsServingCA, err = codec.ParseCertificate(bytes)
-		b.CheckErr(err)
-	}
-
-	if viper.Get("bearer") != "" {
-		bytes, err := os.ReadFile(viper.Get("bearer").(string))
-		b.CheckErr(err)
-		requestData.AuthBearerToken = strings.TrimSpace(string(bytes))
-	}
+	requestData := state.RequestDataFromViper(s, b, refTarget, refPort, probes.DnsResolverName)
 
 	/* Begin */
 
