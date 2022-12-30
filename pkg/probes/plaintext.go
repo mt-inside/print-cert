@@ -47,7 +47,7 @@ func buildPlaintextClient(
 		},
 	}
 
-	c.CheckRedirect = getCheckRedirect(s, b, requestData, c)
+	c.CheckRedirect = getCheckRedirect(s, b, requestData, responseData)
 
 	return c
 }

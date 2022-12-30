@@ -93,30 +93,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	/* Execute */
 
 	responseData := state.NewResponseData()
-	probes.Probe(s, b, requestData, responseData, target, port, viper.GetString("path"), viper.GetBool("dns") || viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
-
-	/* Print */
-
-	// TODO: passing [tls,head][-full] into these functions is hideous.
-	// This needs an outputter like http-log's (shouldn't share/duplicate any code but will use a lot of high-level stuff from the styler like styleHeaderArray())
-	// The outputter should be constructed over all the tls-full etc, then it can be unconditiionally called and choose what to print
-	// Pro: the functions on the outputter should be focussed on feeding info *into* it, like "ingestTLSConnState()", "ingestHTTPResponse()" (should do some parsing like looking for hsts header and promoting to struct field)
-	// - there's then one "printAll()" function which looks at all the tls-full etc flags and prints everything
-	// - it can be clever and eg use hsts info from http header in the TLS output section
-	// - make sure the controlflow is such that this is always called to do what it can no matter if we bail out on an abort or an error
-	// - can do other clever stuff like (in http-log) not printing SNI in tls-agreed if we have the tls-negotiation flag set because that will have done it
-
-	responseData.Print(
-		s, b,
-		requestData,
-		// TODO: if none of these are set, default to dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
-		viper.GetBool("dns"), viper.GetBool("dns-full"),
-		viper.GetBool("tls"), viper.GetBool("tls-full"),
-		viper.GetBool("head"), viper.GetBool("head-full"),
-		viper.GetBool("body"), viper.GetBool("body-full"),
-		// TODO: make printing of request info optional (can be inferred from the args but can be useful to have it spelled out)
-		// TODO: make it possible to turn b.Trace output on/off
-	)
+	probes.Probe(s, b, requestData, responseData, target, port, viper.GetString("path"), viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
 
 	os.Exit(0)
 }

@@ -21,9 +21,8 @@ func dnsSystem(
 	requestData *state.RequestData,
 	responseData *state.ResponseData,
 	addr string,
-) net.IP {
-	// TODO: doc DNS: to actually connect, We use system, always select one so we can say which one. CGO uses getaddrinfo(). Go-native looks in DNS and also reads /etc/hosts (LookupAddr and LookupIP now equivalent except signature)
-	// https://golang-nuts.narkive.com/s2corx0l/go-nuts-net-lookuphost-vs-net-lookupip
+) {
+	// LookupAddr and LookupIP now equivalent except signature (https://golang-nuts.narkive.com/s2corx0l/go-nuts-net-lookuphost-vs-net-lookupip)
 	ip := net.ParseIP(addr)
 	if ip != nil {
 		names, err := net.LookupAddr(ip.String())
@@ -37,8 +36,6 @@ func dnsSystem(
 		ip = ips[0]
 		b.Trace("Connection will use first-returned system-resolved IP: %s", ip)
 	}
-
-	return ip
 }
 
 /* DNSInfo prints detailed results from forward and reverse zone resolution of the given address. addr can be either a hostname or an IPv4/6
