@@ -89,7 +89,7 @@ func (pD *ResponseData) Print(
 				//need a deamonData with these thigns in (reused)
 				fmt.Println("Presenting client cert chain")
 				if printTlsFull {
-					s.ClientCertChain(codec.ChainFromCertificate(requestData.TlsClientPair), nil)
+					s.ClientCertChain(codec.ChainFromCertificate(requestData.TlsClientPair))
 				}
 			}
 			fmt.Println()
@@ -104,7 +104,7 @@ func (pD *ResponseData) Print(
 		// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
 		// If caCert is nil ServingCertChainVerified() will use system roots to verify
 		// The name given is verified against the cert.
-		s.ServingCertChainVerifyNameSignature(pD.TlsServerCerts, requestData.TlsValidateName, requestData.TlsServingCA, printTlsFull)
+		s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, requestData.TlsValidateName, printTlsFull)
 
 		/* TLS agreement summary */
 
