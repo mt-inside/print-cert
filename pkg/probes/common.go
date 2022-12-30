@@ -9,10 +9,11 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/mt-inside/print-cert/pkg/state"
+	"github.com/spf13/viper"
 
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/utils"
+	"github.com/mt-inside/print-cert/pkg/state"
 )
 
 // two objects
@@ -26,23 +27,14 @@ import (
 // - doc names: how TlsVerifyName is derived, how target is used
 // - compare's ref and diff should both be treated like this, and can be names or IPs
 
-func getCheckRedirect(s output.TtyStyler, b output.Bios, requestData *state.RequestData, c *http.Client) func(*http.Request, []*http.Request) error {
+func getCheckRedirect(s output.TtyStyler, b output.Bios, requestData *state.RequestData, responseData *state.ResponseData) func(*http.Request, []*http.Request) error {
+	// NB: when testing this
+	// - Go will only follow redirects when status is 30[1,2,3,7,8] and Location is set (https://cs.opensource.google/go/go/+/refs/tags/go1.19.4:src/net/http/client.go;l=502)
+	// - Even apparently duplicating the request that curl sends, it's really hard to make httpbin give us a 302
 	return func(req *http.Request, via []*http.Request) error {
-		b.Banner("Redirect")
+		responseData.RedirectTarget = req.URL
 
-		// 		fmt.Printf("Redirected to %s\n", s.Addr(req.URL.String()))
-
-		// 		b.Trace("Updating TLS ClientHello", "ServerName", req.URL.Host)
-		// 		getUnderlyingHttpTransport(c).TLSClientConfig.ServerName = req.URL.Host
-
-		// 		b.Trace("Updating HTTP request", "Host", req.URL.Host)
-		// 		req.Host = req.URL.Host
-
-		// 		DnsSystem(s, b, requestData.Timeout, req.URL.Host)
-
-		// 		fmt.Println()
-
-		return nil
+		return http.ErrUseLastResponse
 	}
 }
 
@@ -57,19 +49,63 @@ func Probe(
 	manualDns bool,
 	readBody bool,
 ) {
-	targetIP := dnsSystem(s, b, requestData, responseData, target)
-	var client *http.Client
-	if requestData.TlsEnabled {
-		client = buildTlsClient(s, b, requestData, responseData)
-	} else {
-		client = buildPlaintextClient(s, b, requestData, responseData)
+	for {
+		var client *http.Client
+		if requestData.TlsEnabled {
+			client = buildTlsClient(s, b, requestData, responseData)
+		} else {
+			client = buildPlaintextClient(s, b, requestData, responseData)
+		}
+		request, cancel := buildHttpRequest(s, b, requestData, responseData, target, port, path)
+		defer cancel()
+
+		dnsSystem(s, b, requestData, responseData, target)
+		if manualDns {
+			dnsManual(s, b, requestData, responseData, target) // Performance optimisation
+		}
+
+		probe(s, b, requestData, responseData, client, request, readBody)
+
+		/* Print */
+
+		// TODO: passing [tls,head][-full] into these functions is hideous.
+		// This needs an outputter like http-log's (shouldn't share/duplicate any code but will use a lot of high-level stuff from the styler like styleHeaderArray())
+		// The outputter should be constructed over all the tls-full etc, then it can be unconditiionally called and choose what to print
+		// Pro: the functions on the outputter should be focussed on feeding info *into* it, like "ingestTLSConnState()", "ingestHTTPResponse()" (should do some parsing like looking for hsts header and promoting to struct field)
+		// - there's then one "printAll()" function which looks at all the tls-full etc flags and prints everything
+		// - it can be clever and eg use hsts info from http header in the TLS output section
+		// - make sure the controlflow is such that this is always called to do what it can no matter if we bail out on an abort or an error
+		// - can do other clever stuff like (in http-log) not printing SNI in tls-agreed if we have the tls-negotiation flag set because that will have done it
+
+		responseData.Print(
+			s, b,
+			requestData,
+			// TODO: if none of these are set, default to dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
+			viper.GetBool("dns"), viper.GetBool("dns-full"),
+			viper.GetBool("tls"), viper.GetBool("tls-full"),
+			viper.GetBool("head"), viper.GetBool("head-full"),
+			viper.GetBool("body"), viper.GetBool("body-full"),
+			// TODO: make printing of request info optional (can be inferred from the args but can be useful to have it spelled out)
+			// TODO: make it possible to turn b.Trace output on/off
+		)
+
+		/* Redirect */
+
+		if responseData.HttpStatusCode >= 300 && responseData.HttpStatusCode < 400 {
+			// We're basically re-implementing this, which is horrible to have to do: https://cs.opensource.google/go/go/+/refs/tags/go1.19.4:src/net/http/client.go;drc=9123221ccf3c80c741ead5b6f2e960573b1676b9;l=585
+			// We don't have a choice though, because there's no other way to get hold of the HTTP response and body.
+			// - CheckRedirect returning nil means the client follows redirects and eventually returns only the last metadata and body
+			// - CheckRedirect returning ar err causes the client to bail early (like returning ErrUseLastResponse does), but the http.Response object is empty, and the body is closed
+			loc := responseData.RedirectTarget
+			// TODO: if redirect is NOT relative, set Host and SNI to the new domain (see code linked above)
+			target, port = utils.SplitHostMaybePortDefault(loc.Host, utils.Ternary(loc.Scheme == "https", uint64(443), 80))
+			path = loc.Path
+			// TODO: deal with scheme. Change TLSEnabled on requestData? Modifying that struct doesn't feel like the end of the world
+			responseData = state.NewResponseData()
+		} else {
+			break
+		}
 	}
-	request, cancel := buildHttpRequest(s, b, requestData, responseData, targetIP, port, path)
-	defer cancel()
-	if manualDns {
-		dnsManual(s, b, requestData, responseData, target) // TODO make optional - eventually as perf optim, but now to stop it printing (plaintext too)
-	}
-	probe(s, b, requestData, responseData, client, request, readBody)
 }
 
 func buildHttpRequest(
@@ -77,7 +113,7 @@ func buildHttpRequest(
 	b output.Bios,
 	requestData *state.RequestData,
 	responseData *state.ResponseData,
-	addr net.IP,
+	target string,
 	port uint64,
 	path string,
 ) (*http.Request, context.CancelFunc) {
@@ -85,7 +121,7 @@ func buildHttpRequest(
 	ctx, cancel := context.WithTimeout(context.Background(), requestData.Timeout)
 
 	/* This is the URL we give to the HTTP client library. The "Host" part of the URL is just used as the connection address, and not seen on the other end */
-	addrPort := net.JoinHostPort(addr.String(), strconv.FormatUint(port, 10))
+	addrPort := net.JoinHostPort(target, strconv.FormatUint(port, 10))
 	pathParts, err := url.Parse(path)
 	b.CheckErr(err)
 	l7Addr := url.URL{
@@ -101,10 +137,15 @@ func buildHttpRequest(
 	b.CheckErr(err)
 
 	req.Host = requestData.HttpHost
-	req.Header.Add("user-agent", "print-cert TODO from build info")
 	if requestData.AuthBearerToken != "" {
 		req.Header.Add("authorization", fmt.Sprintf("Bearer %s", requestData.AuthBearerToken))
 	}
+
+	// TODO: do better
+	req.Header.Add("accept", "application/json")
+	req.Header.Add("accept", "*/*")
+	//req.Header.Add("user-agent", "print-cert TODO from build info")
+	req.Header.Add("user-agent", "curl/7.85.0")
 
 	return req, cancel
 }

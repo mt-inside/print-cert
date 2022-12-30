@@ -86,7 +86,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	b.Banner("Reference host")
 
 	refResponseData := state.NewResponseData()
-	probes.Probe(s, b, requestData, refResponseData, refTarget, refPort, viper.GetString("path"), viper.GetBool("dns") || viper.GetBool("dns-full"), true)
+	probes.Probe(s, b, requestData, refResponseData, refTarget, refPort, viper.GetString("path"), viper.GetBool("dns-full"), true)
 
 	refResponseData.Print(
 		s, b,
@@ -105,7 +105,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	b.Banner("New IP")
 
 	newResponseData := state.NewResponseData()
-	probes.Probe(s, b, requestData, newResponseData, newTarget, newPort, viper.GetString("path"), viper.GetBool("dns") || viper.GetBool("dns-full"), true)
+	probes.Probe(s, b, requestData, newResponseData, newTarget, newPort, viper.GetString("path"), viper.GetBool("dns-full"), true)
 
 	newResponseData.Print(
 		s, b,

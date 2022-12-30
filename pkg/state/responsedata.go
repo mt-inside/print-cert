@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -45,6 +46,8 @@ type ResponseData struct {
 	HttpCompressed    bool
 
 	BodyBytes []byte
+
+	RedirectTarget *url.URL
 }
 
 func NewResponseData() *ResponseData {
@@ -148,7 +151,6 @@ func (pD *ResponseData) Print(
 		fmt.Println()
 
 		if !printMetaFull {
-
 			fmt.Printf("\tclaimed %s bytes of %s\n", s.Bright(strconv.FormatInt(int64(pD.HttpContentLength), 10)), s.Noun(pD.HttpHeaders.Get("content-type")))
 			if pD.HttpCompressed {
 				fmt.Printf("\tcontent was transparently decompressed; length information will not be accurate\n")
@@ -184,4 +186,9 @@ func (pD *ResponseData) Print(
 		}
 	}
 
+	if pD.RedirectTarget != nil {
+		b.Banner("Redirect")
+
+		fmt.Printf("Redirected to %s\n", s.Addr(pD.RedirectTarget.String()))
+	}
 }

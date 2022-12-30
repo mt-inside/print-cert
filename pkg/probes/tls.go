@@ -109,7 +109,7 @@ func buildTlsClient(
 	}
 
 	// Really ugly that this can't be set in the literal (so that it can reference and reach into the client and mutate it)
-	c.CheckRedirect = getCheckRedirect(s, b, requestData, c)
+	c.CheckRedirect = getCheckRedirect(s, b, requestData, responseData)
 
 	return c
 }
