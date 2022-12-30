@@ -13,6 +13,7 @@ import (
 
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/utils"
+	"github.com/mt-inside/print-cert/pkg/build"
 	"github.com/mt-inside/print-cert/pkg/state"
 )
 
@@ -141,11 +142,9 @@ func buildHttpRequest(
 		req.Header.Add("authorization", fmt.Sprintf("Bearer %s", requestData.AuthBearerToken))
 	}
 
-	// TODO: do better
-	req.Header.Add("accept", "application/json")
+	// We don't fake user-agent or anything to try to influence responses, but some servers obviously are sensitive to that.
 	req.Header.Add("accept", "*/*")
-	//req.Header.Add("user-agent", "print-cert TODO from build info")
-	req.Header.Add("user-agent", "curl/7.85.0")
+	req.Header.Add("user-agent", build.NameAndVersion())
 
 	return req, cancel
 }
