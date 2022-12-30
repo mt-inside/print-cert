@@ -14,6 +14,7 @@ import (
 
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
+	"github.com/mt-inside/print-cert/pkg/utils"
 )
 
 type RequestData struct {
@@ -58,27 +59,9 @@ func RequestDataFromViper(s output.TtyStyler, b output.Bios, target string, port
 	}
 
 	// TLS SNI ServerName field. Optional.
-	// RFC 6066 §3 (https://www.rfc-editor.org/rfc/rfc6066)
-	// - DNS names only
-	// - No ports
-	// - No literal IPs
-	// Thus either:
-	// - explicitly given value, if conformant
-	// - HTTP Host value (ie explicit or target), if conformant
-	serverNameConformant := func(sn string) bool {
-		// No IPs
-		if ip := net.ParseIP(sn); ip != nil {
-			return false
-		}
-		// No ports
-		if _, _, err := net.SplitHostPort(sn); err == nil {
-			return false
-		}
-		return true
-	}
 	requestData.TlsServerName = viper.GetString("sni")
 	if requestData.TlsServerName != "" {
-		if !serverNameConformant(requestData.TlsServerName) {
+		if !utils.ServerNameConformant(requestData.TlsServerName) {
 			b.PrintErr("SNI ServerName cannot be an IP or contain a port number. Ignoring supplied value.")
 			requestData.TlsServerName = ""
 		}
@@ -86,7 +69,7 @@ func RequestDataFromViper(s output.TtyStyler, b output.Bios, target string, port
 	if requestData.TlsServerName == "" {
 		requestData.TlsServerName = viper.GetString("host")
 		if requestData.TlsServerName != "" {
-			if !serverNameConformant(requestData.TlsServerName) {
+			if !utils.ServerNameConformant(requestData.TlsServerName) {
 				requestData.TlsServerName = ""
 			}
 		}
@@ -94,7 +77,7 @@ func RequestDataFromViper(s output.TtyStyler, b output.Bios, target string, port
 	if requestData.TlsServerName == "" {
 		requestData.TlsServerName = target
 		if requestData.TlsServerName != "" {
-			if !serverNameConformant(requestData.TlsServerName) {
+			if !utils.ServerNameConformant(requestData.TlsServerName) {
 				requestData.TlsServerName = ""
 			}
 		}
