@@ -60,6 +60,9 @@ func main() {
 	cmd.Flags().String("bearer", "", "Path to file whose contents should be used as Authorization: Bearer token")
 	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
 
+	/* Command */
+	cmd.Flags().IntP("interval", "r", 0, "Repeat the probe every n seconds. Not provided / 0 means don't repeat")
+
 	err := viper.BindPFlags(cmd.Flags())
 	if err != nil {
 		panic(errors.New("can't set up flags"))
@@ -86,14 +89,23 @@ func appMain(cmd *cobra.Command, args []string) {
 	target := args[0]
 	port, err := strconv.ParseUint(args[1], 10, 16)
 	b.CheckErr(err)
-	// TODO test all print flags with --no-tls
-
 	requestData := state.RequestDataFromViper(s, b, target, port, probes.DnsResolverName)
+	// TODO test all print flags with --no-tls
 
 	/* Execute */
 
-	responseData := state.NewResponseData()
-	probes.Probe(s, b, requestData, responseData, target, port, viper.GetString("path"), viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
+	period := viper.GetUint("interval")
+	for {
+		responseData := state.NewResponseData() // TODO: is / should be made in Probe()
+		// FIXME: requestData is written by redirect. Have a deepcopy method and give it a copy
+		probes.Probe(s, b, requestData, responseData, target, port, viper.GetString("path"), viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
+		if period == 0 {
+			break
+		}
+		fmt.Println()
+		fmt.Println()
+		time.Sleep(time.Duration(period) * time.Second)
+	}
 
 	os.Exit(0)
 }
