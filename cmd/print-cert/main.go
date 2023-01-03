@@ -94,8 +94,7 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	period := viper.GetUint("interval")
 	for {
-		responseData := state.NewResponseData() // TODO: is / should be made in Probe()
-		probes.Probe(s, b, requestData, rtData, responseData, viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
+		probes.Probe(s, b, requestData, rtData, viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
 		if period == 0 {
 			break
 		}

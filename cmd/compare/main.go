@@ -80,24 +80,19 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	b.Banner("Reference host")
 
-	refResponseData := state.NewResponseData()
 	refRtData := state.DeriveRoundTripData(s, b, refTarget, viper.GetString("host"), viper.GetString("sni"), viper.GetString("path"), !viper.GetBool("no-tls"))
-	probes.Probe(s, b, requestData, refRtData, refResponseData, viper.GetBool("dns-full"), true)
+	refBody := probes.Probe(s, b, requestData, refRtData, viper.GetBool("dns-full"), true)
 
 	/* Check new */
 
 	b.Banner("New IP")
 
-	newResponseData := state.NewResponseData()
 	newRtData := state.DeriveRoundTripData(s, b, newTarget, viper.GetString("host"), viper.GetString("sni"), viper.GetString("path"), !viper.GetBool("no-tls"))
-	probes.Probe(s, b, requestData, newRtData, newResponseData, viper.GetBool("dns-full"), true)
+	newBody := probes.Probe(s, b, requestData, newRtData, viper.GetBool("dns-full"), true)
 
 	/* Body diff */
 
 	b.Banner("Body Differences")
-
-	refBody := refResponseData.BodyBytes
-	newBody := newResponseData.BodyBytes
 
 	if !utf8.Valid(refBody) || !utf8.Valid(newBody) {
 		b.PrintWarn("one or more response bodies aren't valid utf-8; diff engine might do unexpected things")
