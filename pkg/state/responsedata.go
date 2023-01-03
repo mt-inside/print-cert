@@ -57,6 +57,7 @@ func NewResponseData() *ResponseData {
 func (pD *ResponseData) Print(
 	s output.TtyStyler, b output.Bios,
 	requestData *RequestData,
+	rtData *RoundTripData,
 	printDns, printDnsFull,
 	printTls, printTlsFull,
 	printMeta, printMetaFull,
@@ -71,12 +72,12 @@ func (pD *ResponseData) Print(
 	b.Banner("TCP")
 	fmt.Printf("Connected %s -> %s\n", s.Addr(pD.TransportLocalAddr.String()), s.Addr(pD.TransportRemoteAddr.String()))
 
-	if requestData.TlsEnabled && (printTls || printTlsFull) {
+	if rtData.TlsEnabled && (printTls || printTlsFull) {
 		b.Banner("TLS")
 
 		fmt.Printf("Request: ")
-		if requestData.TlsServerName != "" {
-			fmt.Printf("SNI ServerName %s\n", s.Addr(requestData.TlsServerName))
+		if rtData.TlsServerName != "" {
+			fmt.Printf("SNI ServerName %s\n", s.Addr(rtData.TlsServerName))
 		} else {
 			fmt.Printf("Not sending SNI ServerName. Set one with --sni, or will fall back to an explicit --host.\n")
 		}
@@ -104,7 +105,7 @@ func (pD *ResponseData) Print(
 		// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
 		// If caCert is nil ServingCertChainVerified() will use system roots to verify
 		// The name given is verified against the cert.
-		s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, requestData.TlsValidateName, printTlsFull)
+		s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, printTlsFull)
 
 		/* TLS agreement summary */
 
@@ -127,7 +128,7 @@ func (pD *ResponseData) Print(
 	if printMeta || printMetaFull {
 		b.Banner("HTTP")
 
-		fmt.Printf("Request: Host %s %s %s\n", s.Addr(requestData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(requestData.HttpPath))
+		fmt.Printf("Request: Host %s %s %s\n", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
 		if requestData.AuthBearerToken != "" {
 			if token, err := codec.ParseJWTNoSignature(requestData.AuthBearerToken); err == nil {
 				fmt.Printf("\tPresented bearer token: ")

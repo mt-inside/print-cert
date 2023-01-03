@@ -20,6 +20,7 @@ func buildTlsClient(
 	s output.TtyStyler,
 	b output.Bios,
 	requestData *state.RequestData,
+	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
 ) *http.Client {
 
@@ -55,7 +56,7 @@ func buildTlsClient(
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true, // deliberate, qv
 				Renegotiation:      tls.RenegotiateOnceAsClient,
-				ServerName:         requestData.TlsServerName, // SNI for TLS vhosting
+				ServerName:         rtData.TlsServerName, // SNI for TLS vhosting
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 					responseData.TlsClientCertRequest = true
 					b.Trace("TLS: Asked for a client certificate")

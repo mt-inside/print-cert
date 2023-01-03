@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/mt-inside/print-cert/pkg/probes"
 	"github.com/mt-inside/print-cert/pkg/state"
+	"github.com/mt-inside/print-cert/pkg/utils"
 
 	"github.com/mt-inside/http-log/pkg/output"
 )
@@ -30,8 +30,8 @@ func init() {
 func main() {
 
 	cmd := &cobra.Command{
-		Use:  "addr port",
-		Args: cobra.ExactArgs(2),
+		Use:  "target[:port]",
+		Args: cobra.ExactArgs(1),
 		Run:  appMain,
 	}
 
@@ -77,19 +77,17 @@ func main() {
 func appMain(cmd *cobra.Command, args []string) {
 
 	// Need arch:
-	// - commander object that run a probe. Needs to be able to re-enter itself for redirects. Also needs to be drivable eg from a cli that runs it every 5s
 	// - needs an actual -L / --follow-redirects CLI option
-	// - "arg" stuff like TLS certs shouldn't be re-loaded, and tty stylers shouldn't be re-made, but state-holding objects should be new
-	// - but target IP and port need to be changable (so they can be given from whatever DNS system in chosen ,and also varied by the compare front-end)
-	// - factor to Plaintext and TLS prober (same object as responseData). Construct over requestData? internal methods to get transport, client, etc. Interface for Probe(), Print()
 
 	s := output.NewTtyStyler(aurora.NewAurora(true))
 	b := output.NewTtyBios(s)
 
-	target := args[0]
-	port, err := strconv.ParseUint(args[1], 10, 16)
-	b.CheckErr(err)
-	requestData := state.RequestDataFromViper(s, b, target, port, probes.DnsResolverName)
+	tcpTarget := args[0]
+	if !utils.ServerNameConformant(viper.GetString("sni")) {
+		b.PrintErr("SNI ServerName cannot be an IP or contain a port number. Ignoring supplied value.")
+	}
+	requestData := state.RequestDataFromViper(s, b, probes.DnsResolverName)
+	rtData := state.DeriveRoundTripData(s, b, tcpTarget, viper.GetString("host"), viper.GetString("sni"), viper.GetString("path"), !viper.GetBool("no-tls"))
 	// TODO test all print flags with --no-tls
 
 	/* Execute */
@@ -97,8 +95,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	period := viper.GetUint("interval")
 	for {
 		responseData := state.NewResponseData() // TODO: is / should be made in Probe()
-		// FIXME: requestData is written by redirect. Have a deepcopy method and give it a copy
-		probes.Probe(s, b, requestData, responseData, target, port, viper.GetString("path"), viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
+		probes.Probe(s, b, requestData, rtData, responseData, viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
 		if period == 0 {
 			break
 		}

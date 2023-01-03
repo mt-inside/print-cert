@@ -16,6 +16,7 @@ func buildPlaintextClient(
 	s output.TtyStyler,
 	b output.Bios,
 	requestData *state.RequestData,
+	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
 ) *http.Client {
 	c := &http.Client{
