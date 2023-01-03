@@ -36,10 +36,11 @@ func Probe(
 	b output.Bios,
 	requestData *state.RequestData,
 	rtData *state.RoundTripData,
-	responseData *state.ResponseData,
 	manualDns bool,
 	readBody bool,
-) {
+) (body []byte) {
+	responseData := state.NewResponseData()
+
 	for {
 		var client *http.Client
 		if rtData.TlsEnabled {
@@ -55,7 +56,8 @@ func Probe(
 			dnsManual(s, b, requestData, rtData, responseData)
 		}
 
-		probe(s, b, requestData, responseData, client, request, readBody)
+		probe(s, b, responseData, client, request, readBody)
+		body = responseData.BodyBytes
 
 		/* Print */
 
@@ -97,6 +99,8 @@ func Probe(
 			break
 		}
 	}
+
+	return
 }
 
 func buildHttpRequest(
@@ -136,7 +140,6 @@ func buildHttpRequest(
 func probe(
 	s output.TtyStyler,
 	b output.Bios,
-	requestData *state.RequestData,
 	responseData *state.ResponseData,
 	client *http.Client,
 	req *http.Request,
