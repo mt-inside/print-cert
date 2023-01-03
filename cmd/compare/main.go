@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -22,8 +21,8 @@ import (
 func main() {
 
 	cmd := &cobra.Command{
-		Use:  "reference-dns-name reference-port new-ip new-port",
-		Args: cobra.ExactArgs(4),
+		Use:  "reference-target[:port] comparison-target[:port]",
+		Args: cobra.ExactArgs(2),
 		Run:  appMain,
 	}
 
@@ -68,14 +67,10 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	/* Reference server */
 	refTarget := args[0]
-	refPort, err := strconv.ParseUint(args[1], 10, 16)
-	b.CheckErr(err)
 	/* Comparison */
-	newTarget := args[2]
-	newPort, err := strconv.ParseUint(args[3], 10, 16)
-	b.CheckErr(err)
+	newTarget := args[1]
 
-	requestData := state.RequestDataFromViper(s, b, refTarget, refPort, probes.DnsResolverName)
+	requestData := state.RequestDataFromViper(s, b, probes.DnsResolverName)
 
 	/* Begin */
 
@@ -86,38 +81,16 @@ func appMain(cmd *cobra.Command, args []string) {
 	b.Banner("Reference host")
 
 	refResponseData := state.NewResponseData()
-	probes.Probe(s, b, requestData, refResponseData, refTarget, refPort, viper.GetString("path"), viper.GetBool("dns-full"), true)
-
-	refResponseData.Print(
-		s, b,
-		requestData,
-		// TODO: if none of these are set, default to dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
-		viper.GetBool("dns"), viper.GetBool("dns-full"),
-		viper.GetBool("tls"), viper.GetBool("tls-full"),
-		viper.GetBool("head"), viper.GetBool("head-full"),
-		viper.GetBool("body"), viper.GetBool("body-full"),
-		// TODO: make printing of request info optional (can be inferred from the args but can be useful to have it spelled out)
-		// TODO: make it possible to turn b.Trace output on/off
-	)
+	refRtData := state.DeriveRoundTripData(s, b, refTarget, viper.GetString("host"), viper.GetString("sni"), viper.GetString("path"), !viper.GetBool("no-tls"))
+	probes.Probe(s, b, requestData, refRtData, refResponseData, viper.GetBool("dns-full"), true)
 
 	/* Check new */
 
 	b.Banner("New IP")
 
 	newResponseData := state.NewResponseData()
-	probes.Probe(s, b, requestData, newResponseData, newTarget, newPort, viper.GetString("path"), viper.GetBool("dns-full"), true)
-
-	newResponseData.Print(
-		s, b,
-		requestData,
-		// TODO: if none of these are set, default to dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
-		viper.GetBool("dns"), viper.GetBool("dns-full"),
-		viper.GetBool("tls"), viper.GetBool("tls-full"),
-		viper.GetBool("head"), viper.GetBool("head-full"),
-		viper.GetBool("body"), viper.GetBool("body-full"),
-		// TODO: make printing of request info optional (can be inferred from the args but can be useful to have it spelled out)
-		// TODO: make it possible to turn b.Trace output on/off
-	)
+	newRtData := state.DeriveRoundTripData(s, b, newTarget, viper.GetString("host"), viper.GetString("sni"), viper.GetString("path"), !viper.GetBool("no-tls"))
+	probes.Probe(s, b, requestData, newRtData, newResponseData, viper.GetBool("dns-full"), true)
 
 	/* Body diff */
 

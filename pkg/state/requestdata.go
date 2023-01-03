@@ -3,93 +3,41 @@ package state
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"net"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/viper"
 
+	"github.com/mt-inside/print-cert/pkg/utils"
+
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
-	"github.com/mt-inside/print-cert/pkg/utils"
 )
 
 type RequestData struct {
 	Timeout time.Duration
 
+	// TODO: this should be on the other structure? Or just read straight from  the const tbh
 	DnsSystemResolver string
 
-	TlsEnabled bool
-	// Name to send for SNI, might be empty
-	TlsServerName string
-	// Name to validate presented certs against, shouldn't be empty
-	TlsValidateName string
-	TlsClientPair   *tls.Certificate
-	TlsServingCA    *x509.Certificate
+	TlsClientPair *tls.Certificate
+	TlsServingCA  *x509.Certificate
 
-	HttpHost    string
 	HttpMethod  string
-	HttpPath    *url.URL
 	HttpForce11 bool
 
 	AuthKrb         bool
 	AuthBearerToken string
 }
 
-func RequestDataFromViper(s output.TtyStyler, b output.Bios, target string, port uint64, dnsResolverName string) *RequestData {
+func RequestDataFromViper(s output.TtyStyler, b output.Bios, dnsResolverName string) *RequestData {
 	requestData := &RequestData{}
 
 	requestData.Timeout = viper.GetDuration("timeout")
 	requestData.DnsSystemResolver = dnsResolverName
 
-	// HTTP/1.1 Host. Either:
-	// - explicitly given value, or
-	// - connection target, be that name or IP, with non-standard ports appended
-	requestData.HttpHost = viper.GetString("host")
-	if requestData.HttpHost == "" {
-		// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
-		if port == 80 || port == 443 {
-			requestData.HttpHost = target // my reading of the spec is that it's not an error to include 80 or 443 but I can imagine some servers getting confused
-		} else {
-			requestData.HttpHost = net.JoinHostPort(target, strconv.FormatUint(port, 10))
-		}
-	}
-
-	// TLS SNI ServerName field. Optional.
-	requestData.TlsServerName = viper.GetString("sni")
-	if requestData.TlsServerName != "" {
-		if !utils.ServerNameConformant(requestData.TlsServerName) {
-			b.PrintErr("SNI ServerName cannot be an IP or contain a port number. Ignoring supplied value.")
-			requestData.TlsServerName = ""
-		}
-	}
-	if requestData.TlsServerName == "" {
-		requestData.TlsServerName = viper.GetString("host")
-		if requestData.TlsServerName != "" {
-			if !utils.ServerNameConformant(requestData.TlsServerName) {
-				requestData.TlsServerName = ""
-			}
-		}
-	}
-	if requestData.TlsServerName == "" {
-		requestData.TlsServerName = target
-		if requestData.TlsServerName != "" {
-			if !utils.ServerNameConformant(requestData.TlsServerName) {
-				requestData.TlsServerName = ""
-			}
-		}
-	}
-
-	// Name to validate received certs against - fall back some non-empty string, even if it is an IP
-	requestData.TlsValidateName = requestData.TlsServerName
-	if requestData.TlsValidateName == "" {
-		requestData.TlsValidateName = target
-	}
-
-	requestData.TlsEnabled = !viper.GetBool("no-tls")
 	requestData.HttpMethod = "GET"
 
 	requestData.AuthKrb = viper.GetBool("kerberos")
@@ -119,4 +67,56 @@ func RequestDataFromViper(s output.TtyStyler, b output.Bios, target string, port
 	}
 
 	return requestData
+}
+
+type RoundTripData struct {
+	TransportTarget string // addr[:port], where addr is name or IP
+
+	TlsEnabled bool
+	// Name to send for SNI, might be empty
+	TlsServerName string
+	// Name to validate presented certs against, shouldn't be empty
+	TlsValidateName string
+
+	HttpHost string
+	HttpPath *url.URL
+}
+
+func DeriveRoundTripData(s output.TtyStyler, b output.Bios, target, host, sni, path string, tls bool) *RoundTripData {
+	rtd := &RoundTripData{}
+
+	rtd.TransportTarget = target
+
+	// HTTP/1.1 Host. Either:
+	// - explicitly given value, or
+	// - connection target, be that name or IP, with non-standard ports appended
+	rtd.HttpHost = host
+	if rtd.HttpHost == "" {
+		rtd.HttpHost = target
+		// TODO: drop 80/443 suffix
+		// https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.23
+	}
+
+	pathParts, err := url.Parse(path)
+	b.CheckErr(err)
+	rtd.HttpPath = pathParts
+
+	rtd.TlsEnabled = tls
+
+	// TLS SNI ServerName field.
+	rtd.TlsServerName = "" // Field is optional
+	if utils.ServerNameConformant(sni) {
+		rtd.TlsServerName = sni
+	}
+	if rtd.TlsServerName == "" && utils.ServerNameConformant(rtd.HttpHost) {
+		rtd.TlsServerName = rtd.HttpHost
+	}
+
+	// Name to validate received certs against - fall back some non-empty string, even if it is an IP
+	rtd.TlsValidateName = rtd.TlsServerName
+	if rtd.TlsValidateName == "" {
+		rtd.TlsValidateName = rtd.HttpHost
+	}
+
+	return rtd
 }

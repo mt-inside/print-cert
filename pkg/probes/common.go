@@ -4,18 +4,16 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 
 	"github.com/spf13/viper"
 
-	"github.com/mt-inside/http-log/pkg/output"
-	hlu "github.com/mt-inside/http-log/pkg/utils"
 	"github.com/mt-inside/print-cert/pkg/build"
 	"github.com/mt-inside/print-cert/pkg/state"
-	"github.com/mt-inside/print-cert/pkg/utils"
+
+	"github.com/mt-inside/http-log/pkg/output"
+	hlu "github.com/mt-inside/http-log/pkg/utils"
 )
 
 func getCheckRedirect(s output.TtyStyler, b output.Bios, requestData *state.RequestData, responseData *state.ResponseData) func(*http.Request, []*http.Request) error {
@@ -32,30 +30,29 @@ func getCheckRedirect(s output.TtyStyler, b output.Bios, requestData *state.Requ
 	}
 }
 
+// TODO: don't pass responseData in
 func Probe(
 	s output.TtyStyler,
 	b output.Bios,
 	requestData *state.RequestData,
+	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
-	target string,
-	port uint64,
-	path string,
 	manualDns bool,
 	readBody bool,
 ) {
 	for {
 		var client *http.Client
-		if requestData.TlsEnabled {
-			client = buildTlsClient(s, b, requestData, responseData)
+		if rtData.TlsEnabled {
+			client = buildTlsClient(s, b, requestData, rtData, responseData)
 		} else {
-			client = buildPlaintextClient(s, b, requestData, responseData)
+			client = buildPlaintextClient(s, b, requestData, rtData, responseData)
 		}
-		request, cancel := buildHttpRequest(s, b, requestData, responseData, target, port, path)
+		request, cancel := buildHttpRequest(s, b, requestData, rtData, responseData)
 		defer cancel()
 
-		dnsSystem(s, b, requestData, responseData, target)
-		if manualDns {
-			dnsManual(s, b, requestData, responseData, target) // Performance optimisation
+		dnsSystem(s, b, requestData, rtData, responseData)
+		if manualDns { // Performance optimisation
+			dnsManual(s, b, requestData, rtData, responseData)
 		}
 
 		probe(s, b, requestData, responseData, client, request, readBody)
@@ -74,6 +71,7 @@ func Probe(
 		responseData.Print(
 			s, b,
 			requestData,
+			rtData,
 			// TODO: if none of these are set, default to dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
 			viper.GetBool("dns"), viper.GetBool("dns-full"),
 			viper.GetBool("tls"), viper.GetBool("tls-full"),
@@ -91,22 +89,9 @@ func Probe(
 			// - CheckRedirect returning nil means the client follows redirects and eventually returns only the last metadata and body
 			// - CheckRedirect returning ar err causes the client to bail early (like returning ErrUseLastResponse does), but the http.Response object is empty, and the body is closed
 			loc := responseData.RedirectTarget
-			// TODO: a lot of this should be factored with RequestDataFromViper()
-			// - func that takes target, Host, SNI and sets all the fields like below. This call site just gives loc.Host for all args (with option to keep using viper settings)
 			// The std lib does a lot of messing around working out if the redirect is relative etc, but I think we can just take this new target (which is Location resolved onto the original request target) and use its host?
-			requestData.HttpHost = loc.Host
-			requestData.TlsServerName = ""
-			if utils.ServerNameConformant(loc.Host) {
-				requestData.TlsServerName = loc.Host
-			}
-			// Name to validate received certs against - fall back some non-empty string, even if it is an IP
-			requestData.TlsValidateName = requestData.TlsServerName
-			if requestData.TlsValidateName == "" {
-				requestData.TlsValidateName = loc.Host
-			}
-			requestData.TlsEnabled = loc.Scheme == "https"
-			target, port = hlu.SplitHostMaybePortDefault(loc.Host, hlu.Ternary(loc.Scheme == "https", uint64(443), 80))
-			path = loc.Path
+			rtData = state.DeriveRoundTripData(s, b, loc.Host, loc.Host, loc.Host, loc.Path, loc.Scheme == "https")
+
 			responseData = state.NewResponseData()
 		} else {
 			break
@@ -118,31 +103,25 @@ func buildHttpRequest(
 	s output.TtyStyler,
 	b output.Bios,
 	requestData *state.RequestData,
+	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
-	target string,
-	port uint64,
-	path string,
 ) (*http.Request, context.CancelFunc) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), requestData.Timeout)
 
 	/* This is the URL we give to the HTTP client library. The "Host" part of the URL is just used as the connection address, and not seen on the other end */
-	addrPort := net.JoinHostPort(target, strconv.FormatUint(port, 10))
-	pathParts, err := url.Parse(path)
-	b.CheckErr(err)
 	l7Addr := url.URL{
-		Scheme:   hlu.Ternary(requestData.TlsEnabled, "https", "http"),
-		Host:     addrPort, // could leave off 80 or 443 but not an error to include them
-		Path:     pathParts.EscapedPath(),
-		RawQuery: pathParts.RawQuery,
-		Fragment: pathParts.EscapedFragment(),
+		Scheme:   hlu.Ternary(rtData.TlsEnabled, "https", "http"),
+		Host:     rtData.TransportTarget, // could leave off 80 or 443 but not an error to include them
+		Path:     rtData.HttpPath.EscapedPath(),
+		RawQuery: rtData.HttpPath.RawQuery,
+		Fragment: rtData.HttpPath.EscapedFragment(),
 	}
-	requestData.HttpPath = &l7Addr
 
-	req, err := http.NewRequestWithContext(ctx, requestData.HttpMethod, requestData.HttpPath.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, requestData.HttpMethod, l7Addr.String(), nil)
 	b.CheckErr(err)
 
-	req.Host = requestData.HttpHost
+	req.Host = rtData.HttpHost
 	if requestData.AuthBearerToken != "" {
 		req.Header.Add("authorization", fmt.Sprintf("Bearer %s", requestData.AuthBearerToken))
 	}

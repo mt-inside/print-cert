@@ -19,18 +19,19 @@ func dnsSystem(
 	s output.TtyStyler,
 	b output.Bios,
 	requestData *state.RequestData,
+	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
-	addr string,
 ) {
+	host, _ := utils.SplitHostMaybePort(rtData.TransportTarget)
 	// LookupAddr and LookupIP now equivalent except signature (https://golang-nuts.narkive.com/s2corx0l/go-nuts-net-lookuphost-vs-net-lookupip)
-	ip := net.ParseIP(addr)
+	ip := net.ParseIP(host)
 	if ip != nil {
 		names, err := net.LookupAddr(ip.String())
 		b.CheckErr(err)
 		responseData.DnsSystemResolves = names
 		b.Trace("Provided target %s is already an IP.", ip)
 	} else {
-		ips, err := net.LookupIP(addr)
+		ips, err := net.LookupIP(host)
 		b.CheckErr(err)
 		responseData.DnsSystemResolves = utils.MapToString(ips)
 		ip = ips[0]
@@ -50,13 +51,14 @@ func dnsManual(
 	s output.TtyStyler,
 	b output.Bios,
 	requestData *state.RequestData,
+	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
-	addr string,
 ) {
 	// Ideally we'd save all this info in responseData and then print in Print(), but it's a lot of effort and this always runs in a separate phase
 	b.Banner("DNS - extra manual resolution (information only)")
 
-	ip := net.ParseIP(addr)
+	host, _ := utils.SplitHostMaybePort(rtData.TransportTarget)
+	ip := net.ParseIP(host)
 	if ip != nil {
 		// It's an IP: do reverse lookup
 		names := queryRevDNS(s, b, requestData.Timeout, ip)
@@ -68,7 +70,7 @@ func dnsManual(
 		}
 	} else {
 		// It's not an IP; assume it's a name: do forwards lookup
-		ips, fqdn := queryDNS(s, b, requestData.Timeout, addr)
+		ips, fqdn := queryDNS(s, b, requestData.Timeout, host)
 		for _, ip := range ips {
 			revNames := queryRevDNS(s, b, requestData.Timeout, ip)
 			if len(revNames) > 0 {
