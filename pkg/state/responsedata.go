@@ -18,6 +18,29 @@ import (
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
+type PrintOpts struct {
+	PrintDns, PrintDnsFull   bool
+	PrintTcp, PrintTcpFull   bool
+	PrintTls, PrintTlsFull   bool
+	PrintMeta, PrintMetaFull bool
+	PrintBody, PrintBodyFull bool
+}
+
+func (pO *PrintOpts) Zero() bool {
+	return !(pO.PrintDns || pO.PrintDnsFull ||
+		pO.PrintTcp || pO.PrintTcpFull ||
+		pO.PrintTls || pO.PrintTlsFull ||
+		pO.PrintMeta || pO.PrintMetaFull ||
+		pO.PrintBody || pO.PrintBodyFull)
+}
+func (pO *PrintOpts) SetDefaults() {
+	pO.PrintDns = true
+	pO.PrintTcp = true
+	pO.PrintTls = true
+	pO.PrintMeta = true
+	pO.PrintBody = true
+}
+
 // TODO: some/all of these fields to be type Event{timestamp, value: T}
 type ResponseData struct {
 	DnsSystemResolves []string
@@ -59,23 +82,19 @@ func (pD *ResponseData) Print(
 	s output.TtyStyler, b output.Bios,
 	requestData *RequestData,
 	rtData *RoundTripData,
-	printTcp, printTcpFull,
-	printDns, printDnsFull,
-	printTls, printTlsFull,
-	printMeta, printMetaFull,
-	printBody, printBodyFull bool,
+	pO *PrintOpts,
 ) {
-	if printDns || printDnsFull {
+	if pO.PrintDns || pO.PrintDnsFull {
 		b.Banner(fmt.Sprintf("DNS - system resolver (%s)", requestData.DnsSystemResolver))
 		fmt.Printf("TCP addresses: %s\n", s.List(pD.DnsSystemResolves, s.AddrStyle))
 	}
 
-	if printTcp || printTcpFull {
+	if pO.PrintTcp || pO.PrintTcpFull {
 		b.Banner("TCP")
 		fmt.Printf("Connected %s -> %s\n", s.Addr(pD.TransportLocalAddr.String()), s.Addr(pD.TransportRemoteAddr.String()))
 	}
 
-	if rtData.TlsEnabled && (printTls || printTlsFull) {
+	if rtData.TlsEnabled && (pO.PrintTls || pO.PrintTlsFull) {
 		b.Banner("TLS")
 
 		fmt.Printf("Request: ")
@@ -93,7 +112,7 @@ func (pD *ResponseData) Print(
 			} else {
 				//need a deamonData with these thigns in (reused)
 				fmt.Println("Presenting client cert chain")
-				if printTlsFull {
+				if pO.PrintTlsFull {
 					s.ClientCertChain(codec.ChainFromCertificate(requestData.TlsClientPair))
 				}
 			}
@@ -109,7 +128,7 @@ func (pD *ResponseData) Print(
 		// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
 		// If caCert is nil ServingCertChainVerified() will use system roots to verify
 		// The name given is verified against the cert.
-		s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, printTlsFull)
+		s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, pO.PrintTlsFull)
 
 		/* TLS agreement summary */
 
@@ -129,7 +148,7 @@ func (pD *ResponseData) Print(
 
 	}
 
-	if printMeta || printMetaFull {
+	if pO.PrintMeta || pO.PrintMetaFull {
 		b.Banner("HTTP")
 
 		fmt.Printf("Request: Host %s %s %s\n", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
@@ -155,7 +174,7 @@ func (pD *ResponseData) Print(
 		fmt.Printf(" from %s", s.OptionalString(pD.HttpHeaders.Get("server"), s.NounStyle))
 		fmt.Println()
 
-		if !printMetaFull {
+		if !pO.PrintMetaFull {
 			fmt.Printf("\tclaimed %s bytes of %s\n", s.Bright(strconv.FormatInt(int64(pD.HttpContentLength), 10)), s.Noun(pD.HttpHeaders.Get("content-type")))
 			if pD.HttpCompressed {
 				fmt.Printf("\tcontent was transparently decompressed; length information will not be accurate\n")
@@ -168,7 +187,7 @@ func (pD *ResponseData) Print(
 		}
 	}
 
-	if printBody || printBodyFull {
+	if pO.PrintBody || pO.PrintBodyFull {
 		b.Banner("Body")
 		bodyLen := len(pD.BodyBytes)
 
@@ -177,7 +196,7 @@ func (pD *ResponseData) Print(
 		fmt.Println()
 
 		printLen := usvc.MinInt(bodyLen, 72)
-		if printBodyFull {
+		if pO.PrintBodyFull {
 			printLen = bodyLen
 		}
 

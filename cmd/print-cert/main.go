@@ -78,7 +78,7 @@ func main() {
 
 func appMain(cmd *cobra.Command, args []string) {
 
-	// Need arch:
+	// TODO Need arch:
 	// - needs an actual -L / --follow-redirects CLI option
 
 	s := output.NewTtyStyler(aurora.NewAurora(true))
@@ -92,11 +92,22 @@ func appMain(cmd *cobra.Command, args []string) {
 	rtData := state.DeriveRoundTripData(s, b, tcpTarget, viper.GetString("host"), viper.GetString("sni"), viper.GetString("path"), !viper.GetBool("no-tls"))
 	// TODO test all print flags with --no-tls
 
+	printOpts := &state.PrintOpts{
+		viper.GetBool("dns"), viper.GetBool("dns-full"),
+		viper.GetBool("transport"), viper.GetBool("transport-full"),
+		viper.GetBool("tls"), viper.GetBool("tls-full"),
+		viper.GetBool("head"), viper.GetBool("head-full"),
+		viper.GetBool("body"), viper.GetBool("body-full"),
+	}
+	if printOpts.Zero() {
+		printOpts.SetDefaults()
+	}
+
 	/* Execute */
 
 	period := viper.GetUint("interval")
 	for {
-		probes.Probe(s, b, requestData, rtData, viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
+		probes.Probe(s, b, requestData, rtData, printOpts, viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
 		if period == 0 {
 			break
 		}
