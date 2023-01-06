@@ -169,7 +169,7 @@ func (pD *ResponseData) Print(
 	}
 
 	if printBody || printBodyFull {
-		b.Banner("HTTP Body")
+		b.Banner("Body")
 		bodyLen := len(pD.BodyBytes)
 
 		fmt.Printf("%s bytes of body actually read\n", s.Bright(strconv.FormatInt(int64(bodyLen), 10)))
