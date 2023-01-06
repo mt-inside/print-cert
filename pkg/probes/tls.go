@@ -35,15 +35,15 @@ func buildTlsClient(
 					// Note: happens "after creating the network connection but before actually dialing."
 					Control: func(network, address string, rawConn syscall.RawConn) error {
 						responseData.TransportDialTime = time.Now()
-						b.Trace("Dialing", "addr", address) // TODO ever any different to the below? Should just capture the time here, and print it if in transport-full
+						b.Trace("Dialing", "addr", address)
 
 						return nil
 					},
 				}
 				conn, err := dialer.DialContext(ctx, network, address)
 				b.CheckErr(err)
-				b.Trace("Connected", "to", conn.RemoteAddr(), "from", conn.LocalAddr())
 
+				b.Trace("Connected", "to", conn.RemoteAddr(), "from", conn.LocalAddr())
 				responseData.TransportConnTime = time.Now()
 				responseData.TransportLocalAddr = conn.LocalAddr()
 				responseData.TransportRemoteAddr = conn.RemoteAddr()
@@ -54,7 +54,11 @@ func buildTlsClient(
 			ResponseHeaderTimeout: requestData.Timeout,
 			DisableCompression:    true,
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, // deliberate, qv
+				// Note that the Print() function verifies the certs we're presented against the CAs provided (or built-in)
+				// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
+				// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
+				// Thus we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
+				InsecureSkipVerify: true, // deliberate
 				Renegotiation:      tls.RenegotiateOnceAsClient,
 				ServerName:         rtData.TlsServerName, // SNI for TLS vhosting
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
@@ -67,11 +71,19 @@ func buildTlsClient(
 
 					return requestData.TlsClientPair, nil
 				},
+				// I think this func is
+				// - Called when we receive the serving certs
+				// - Library has already done basic validation like expiration checks
+				// - Library has also checked them against the CA(s), and provided verified chains back to those roots of trust
+				// - But, because we set InsecureSkipVerify, we'll always get here.
+				// - By the same token, verifiedChains is always empty (we manually call that validation function later, when it wouldn't cause a connection abort)
+				// - We're asked to give any other opinions on them
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-					b.Trace("TLS: built-in cert verification finished (no-op in our config)")
+					b.Trace("TLS: built-in cert verification finished (no-op)")
 
-					// TODO: should extract serving keys here, for purity
-					// Also tbf we might not reach the next function if say alpn negotiation fails
+					// For maximum purity we'd save the presented certs in this callback, but
+					// - a) we'd have to parse them ourselves, and idk how much nuance there is in that, and
+					// - b) I don't think it's ever the case that we'd reach here but not the next callback (maybe if they fail to negotiate ALPN or summat)
 
 					if len(verifiedChains) > 0 {
 						panic("Shouldn't see this cause we set InsecureSkipVerify")
@@ -79,8 +91,11 @@ func buildTlsClient(
 
 					return nil
 				},
+				// I think this func is
+				// - One last chance to reject the connection
+				// - I think all cert checking can be done above, so this is about objecting to the negotiated ALPN protocol or cypher suite or whatever
 				VerifyConnection: func(cs tls.ConnectionState) error {
-					b.Trace("TLS: all cert verification finished")
+					b.Trace("TLS: handshake complete")
 
 					responseData.TlsAgreedVersion = cs.Version
 					responseData.TlsAgreedCipherSuite = cs.CipherSuite
@@ -88,13 +103,12 @@ func buildTlsClient(
 					responseData.TlsAgreedALPN = cs.NegotiatedProtocol
 					responseData.TlsOCSPStapled = len(cs.OCSPResponse) > 0
 
-					// Note that the Print() function verifies the certs we're presented against the CAs provided (or built-in)
-					// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
-					// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
-					// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
-					// If caCert is nil ServingCertChainVerified() will use system roots to verify
 					// TODO: verify servername == our requested sni.
 					responseData.TlsServerCerts = cs.PeerCertificates
+					if rtData.TlsServerName != "" && cs.ServerName != rtData.TlsServerName {
+						b.PrintErr("TLS handshake's ServerName " + cs.ServerName + " does not equal requested " + rtData.TlsServerName)
+					}
+					responseData.TlsServerName = cs.ServerName
 
 					return nil
 				},
