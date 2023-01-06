@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/spf13/viper"
-
 	"github.com/mt-inside/print-cert/pkg/build"
 	"github.com/mt-inside/print-cert/pkg/state"
 
@@ -36,6 +34,7 @@ func Probe(
 	b output.Bios,
 	requestData *state.RequestData,
 	rtData *state.RoundTripData,
+	printOpts *state.PrintOpts,
 	manualDns bool,
 	readBody bool,
 ) (body []byte) {
@@ -61,10 +60,7 @@ func Probe(
 
 		/* Print */
 
-		// TODO: passing [tls,head][-full] into these functions is hideous.
-		// This needs an outputter like http-log's (shouldn't share/duplicate any code but will use a lot of high-level stuff from the styler like styleHeaderArray())
-		// The outputter should be constructed over all the tls-full etc, then it can be unconditiionally called and choose what to print
-		// Pro: the functions on the outputter should be focussed on feeding info *into* it, like "ingestTLSConnState()", "ingestHTTPResponse()" (should do some parsing like looking for hsts header and promoting to struct field)
+		// TODO: the functions on the state object should be focussed on feeding info *into* it, like "ingestTLSConnState()", "ingestHTTPResponse()" (should do some parsing like looking for hsts header and promoting to struct field)
 		// - there's then one "printAll()" function which looks at all the tls-full etc flags and prints everything
 		// - it can be clever and eg use hsts info from http header in the TLS output section
 		// - make sure the controlflow is such that this is always called to do what it can no matter if we bail out on an abort or an error
@@ -74,12 +70,7 @@ func Probe(
 			s, b,
 			requestData,
 			rtData,
-			// TODO: if none of these are set, default to tcp,dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
-			viper.GetBool("transport"), viper.GetBool("transport-full"),
-			viper.GetBool("dns"), viper.GetBool("dns-full"),
-			viper.GetBool("tls"), viper.GetBool("tls-full"),
-			viper.GetBool("head"), viper.GetBool("head-full"),
-			viper.GetBool("body"), viper.GetBool("body-full"),
+			printOpts,
 			// TODO: make printing of request info optional (can be inferred from the args but can be useful to have it spelled out)
 			// TODO: make it possible to turn b.Trace output on/off
 		)
