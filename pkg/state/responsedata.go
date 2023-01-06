@@ -35,6 +35,7 @@ type ResponseData struct {
 	TlsAgreedTime        *time.Time
 	TlsAgreedVersion     uint16
 	TlsAgreedCipherSuite uint16
+	TlsServerName        string
 	TlsAgreedALPN        string
 	TlsOCSPStapled       bool
 
@@ -79,7 +80,8 @@ func (pD *ResponseData) Print(
 		if rtData.TlsServerName != "" {
 			fmt.Printf("SNI ServerName %s\n", s.Addr(rtData.TlsServerName))
 		} else {
-			fmt.Printf("Not sending SNI ServerName. Set one with --sni, or will fall back to an explicit --host.\n")
+			// If an explicit --sni is given which is invalid, we'll already have error'd out
+			b.PrintWarn("Not sending SNI ServerName. Either provide one explicity with --sni, or give a --host or target that's a valid SNI.")
 		}
 		fmt.Println()
 
@@ -116,7 +118,7 @@ func (pD *ResponseData) Print(
 		// - [ ] Certificate Transparency: understand it, do stuff. Is a header? Is also stuff in the OCSP bundle?
 		// - [ ] DNS CAA records: should investigate and print in the TLS section
 		// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
-		fmt.Printf("%s handshake complete\n", s.Noun(output.TLSVersionName(pD.TlsAgreedVersion)))
+		fmt.Printf("%s handshake complete with %s\n", s.Noun(output.TLSVersionName(pD.TlsAgreedVersion)), s.Addr(pD.TlsServerName))
 		fmt.Printf("\tSymmetric cypher suite %s\n", s.Noun(tls.CipherSuiteName(pD.TlsAgreedCipherSuite)))
 		fmt.Printf("\tALPN proto %s\n", s.OptionalString(pD.TlsAgreedALPN, s.NounStyle))
 		fmt.Printf("\tOCSP info stapled to response? %s\n", s.YesNo(pD.TlsOCSPStapled))
