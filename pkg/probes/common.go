@@ -74,7 +74,8 @@ func Probe(
 			s, b,
 			requestData,
 			rtData,
-			// TODO: if none of these are set, default to dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
+			// TODO: if none of these are set, default to tcp,dns,tls,head,body. Can't set their default flag values cause then they can't be turned off. See how http-log does it
+			viper.GetBool("transport"), viper.GetBool("transport-full"),
 			viper.GetBool("dns"), viper.GetBool("dns-full"),
 			viper.GetBool("tls"), viper.GetBool("tls-full"),
 			viper.GetBool("head"), viper.GetBool("head-full"),

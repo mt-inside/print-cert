@@ -43,6 +43,8 @@ func main() {
 	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
 
 	/* Output */
+	cmd.Flags().BoolP("transport", "l", false, "Print important transport (TCP) info")
+	cmd.Flags().BoolP("transport-full", "L", false, "Print all transport (TCP) info")
 	cmd.Flags().BoolP("dns", "d", false, "Print important DNS info")
 	cmd.Flags().BoolP("dns-full", "D", false, "Show detailed DNS testing for the given addr (note: this is just indicative; the system resolver is used to make the actual connection)")
 	cmd.Flags().BoolP("tls", "t", false, "Print important agreed TLS parameters")
