@@ -59,6 +59,7 @@ func (pD *ResponseData) Print(
 	s output.TtyStyler, b output.Bios,
 	requestData *RequestData,
 	rtData *RoundTripData,
+	printTcp, printTcpFull,
 	printDns, printDnsFull,
 	printTls, printTlsFull,
 	printMeta, printMetaFull,
@@ -69,9 +70,10 @@ func (pD *ResponseData) Print(
 		fmt.Printf("TCP addresses: %s\n", s.List(pD.DnsSystemResolves, s.AddrStyle))
 	}
 
-	// TODO: make transport printing optional. What are http-log's Transport and Tls short flags?
-	b.Banner("TCP")
-	fmt.Printf("Connected %s -> %s\n", s.Addr(pD.TransportLocalAddr.String()), s.Addr(pD.TransportRemoteAddr.String()))
+	if printTcp || printTcpFull {
+		b.Banner("TCP")
+		fmt.Printf("Connected %s -> %s\n", s.Addr(pD.TransportLocalAddr.String()), s.Addr(pD.TransportRemoteAddr.String()))
+	}
 
 	if rtData.TlsEnabled && (printTls || printTlsFull) {
 		b.Banner("TLS")
