@@ -56,7 +56,6 @@ func getCheckRedirect(s output.TtyStyler, b output.Bios, requestData *state.Requ
 	}
 }
 
-// TODO: don't pass responseData in
 func Probe(
 	s output.TtyStyler,
 	b output.Bios,
