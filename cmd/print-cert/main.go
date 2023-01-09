@@ -54,8 +54,8 @@ func main() {
 	cmd.Flags().BoolP("dns-full", "D", false, "Show detailed DNS testing for the given addr (note: this is just indicative; the system resolver is used to make the actual connection)")
 	cmd.Flags().BoolP("tls", "t", false, "Print important agreed TLS parameters")
 	cmd.Flags().BoolP("tls-full", "T", false, "Print all agreed TLS parameters")
-	cmd.Flags().BoolP("head", "m", false, "Print important HTTP response metadata")
-	cmd.Flags().BoolP("head-full", "M", false, "Print all HTTP response metadata")
+	cmd.Flags().BoolP("http", "m", false, "Print important HTTP response metadata")
+	cmd.Flags().BoolP("http-full", "M", false, "Print all HTTP response metadata")
 	cmd.Flags().BoolP("body", "b", false, "Print truncated HTTP response body")
 	cmd.Flags().BoolP("body-full", "B", false, "Print full HTTP response body")
 
@@ -101,7 +101,7 @@ func appMain(cmd *cobra.Command, args []string) {
 		PrintDns: viper.GetBool("dns"), PrintDnsFull: viper.GetBool("dns-full"),
 		PrintTcp: viper.GetBool("transport"), PrintTcpFull: viper.GetBool("transport-full"),
 		PrintTls: viper.GetBool("tls"), PrintTlsFull: viper.GetBool("tls-full"),
-		PrintMeta: viper.GetBool("head"), PrintMetaFull: viper.GetBool("head-full"),
+		PrintHttp: viper.GetBool("http"), PrintHttpFull: viper.GetBool("http-full"),
 		PrintBody: viper.GetBool("body"), PrintBodyFull: viper.GetBool("body-full"),
 		Trace: viper.GetBool("trace"), Requests: viper.GetBool("requests"),
 	}

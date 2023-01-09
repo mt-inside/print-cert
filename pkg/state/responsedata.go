@@ -21,11 +21,10 @@ import (
 type PrintOpts struct {
 	// TODO drop Print
 	// TODO: make an enum
-	// TODO: Meta => Http
 	PrintDns, PrintDnsFull   bool
 	PrintTcp, PrintTcpFull   bool
 	PrintTls, PrintTlsFull   bool
-	PrintMeta, PrintMetaFull bool
+	PrintHttp, PrintHttpFull bool
 	PrintBody, PrintBodyFull bool
 	Trace, Requests          bool
 }
@@ -34,14 +33,14 @@ func (pO *PrintOpts) Zero() bool {
 	return !(pO.PrintDns || pO.PrintDnsFull ||
 		pO.PrintTcp || pO.PrintTcpFull ||
 		pO.PrintTls || pO.PrintTlsFull ||
-		pO.PrintMeta || pO.PrintMetaFull ||
+		pO.PrintHttp || pO.PrintHttpFull ||
 		pO.PrintBody || pO.PrintBodyFull)
 }
 func (pO *PrintOpts) SetDefaults() {
 	pO.PrintDns = true
 	pO.PrintTcp = true
 	pO.PrintTls = true
-	pO.PrintMeta = true
+	pO.PrintHttp = true
 	pO.PrintBody = true
 }
 
@@ -169,7 +168,7 @@ func (pD *ResponseData) Print(
 
 	}
 
-	if pO.PrintMeta || pO.PrintMetaFull {
+	if pO.PrintHttp || pO.PrintHttpFull {
 		b.Banner("HTTP")
 
 		if pO.Requests {
@@ -197,7 +196,7 @@ func (pD *ResponseData) Print(
 		fmt.Printf(" from %s", s.OptionalString(pD.HttpHeaders.Get("server"), s.NounStyle))
 		fmt.Println()
 
-		if !pO.PrintMetaFull {
+		if !pO.PrintHttpFull {
 			fmt.Printf("\tclaimed %s bytes of %s\n", s.Bright(strconv.FormatInt(int64(pD.HttpContentLength), 10)), s.Noun(pD.HttpHeaders.Get("content-type")))
 			if pD.HttpCompressed {
 				fmt.Printf("\tcontent was transparently decompressed; length information will not be accurate\n")
