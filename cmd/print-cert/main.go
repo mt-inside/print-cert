@@ -95,19 +95,9 @@ func appMain(cmd *cobra.Command, args []string) {
 	}
 
 	requestData := state.RequestDataFromViper(s, b, probes.DnsResolverName)
-	// TODO test all print flags with --no-tls
+	printOpts := state.PrintOptsFromViper()
 
-	printOpts := &state.PrintOpts{
-		Dns: viper.GetBool("dns"), DnsFull: viper.GetBool("dns-full"),
-		Tcp: viper.GetBool("transport"), TcpFull: viper.GetBool("transport-full"),
-		Tls: viper.GetBool("tls"), TlsFull: viper.GetBool("tls-full"),
-		Http: viper.GetBool("http"), HttpFull: viper.GetBool("http-full"),
-		Body: viper.GetBool("body"), BodyFull: viper.GetBool("body-full"),
-		Trace: viper.GetBool("trace"), Requests: viper.GetBool("requests"),
-	}
-	if printOpts.Zero() {
-		printOpts.SetDefaults()
-	}
+	// TODO test all print flags with --no-tls
 
 	/* Execute */
 

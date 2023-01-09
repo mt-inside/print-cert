@@ -12,6 +12,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/spf13/viper"
+
 	"github.com/mt-inside/go-usvc"
 
 	"github.com/mt-inside/http-log/pkg/codec"
@@ -19,7 +21,6 @@ import (
 )
 
 type PrintOpts struct {
-	// TODO: make an enum
 	Dns, DnsFull    bool
 	Tcp, TcpFull    bool
 	Tls, TlsFull    bool
@@ -28,19 +29,38 @@ type PrintOpts struct {
 	Trace, Requests bool
 }
 
-func (pO *PrintOpts) Zero() bool {
+func PrintOptsFromViper() (pO PrintOpts) {
+	pO = PrintOpts{
+		Dns: viper.GetBool("dns"), DnsFull: viper.GetBool("dns-full"),
+		Tcp: viper.GetBool("transport"), TcpFull: viper.GetBool("transport-full"),
+		Tls: viper.GetBool("tls"), TlsFull: viper.GetBool("tls-full"),
+		Http: viper.GetBool("http"), HttpFull: viper.GetBool("http-full"),
+		Body: viper.GetBool("body"), BodyFull: viper.GetBool("body-full"),
+		Trace: viper.GetBool("trace"), Requests: viper.GetBool("requests"),
+	}
+	if pO.Zero() {
+		pO = printOptsDefault()
+	}
+
+	return
+}
+
+func (pO PrintOpts) Zero() bool {
+	// Having PrintOpts be an enum would make this function sexier, but overall it's harder (Enums in Go suck)
 	return !(pO.Dns || pO.DnsFull ||
 		pO.Tcp || pO.TcpFull ||
 		pO.Tls || pO.TlsFull ||
 		pO.Http || pO.HttpFull ||
 		pO.Body || pO.BodyFull)
 }
-func (pO *PrintOpts) SetDefaults() {
+func printOptsDefault() (pO PrintOpts) {
 	pO.Dns = true
 	pO.Tcp = true
 	pO.Tls = true
 	pO.Http = true
 	pO.Body = true
+
+	return
 }
 
 // TODO: some/all of these fields to be type Event{timestamp, value: T}
@@ -88,7 +108,7 @@ func (pD *ResponseData) Print(
 	s output.TtyStyler, b output.Bios,
 	requestData *RequestData,
 	rtData *RoundTripData,
-	pO *PrintOpts,
+	pO PrintOpts,
 ) {
 	// TODO: make work for aborted responses. Mostly about how we call it
 	// - work out how to test an abort in each section (and document, and script if possible)

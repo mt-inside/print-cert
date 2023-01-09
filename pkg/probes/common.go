@@ -62,7 +62,7 @@ func Probe(
 	b output.Bios,
 	requestData *state.RequestData,
 	rtData *state.RoundTripData,
-	printOpts *state.PrintOpts,
+	printOpts state.PrintOpts,
 	manualDns bool,
 	readBody bool,
 ) (body []byte) {
