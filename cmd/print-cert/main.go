@@ -15,6 +15,8 @@ import (
 	"github.com/mt-inside/print-cert/pkg/state"
 	"github.com/mt-inside/print-cert/pkg/utils"
 
+	hlu "github.com/mt-inside/http-log/pkg/utils"
+
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
@@ -43,6 +45,9 @@ func main() {
 	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
 
 	/* Output */
+	// Recall: it's --foo=false for Viper, not --no-foo
+	cmd.Flags().BoolP("trace", "v", false, "Trace requests/responses as they happen, in addition to printing info at the end")
+	cmd.Flags().BoolP("requests", "V", true, "Print summary of the requests being sent. Nothing that can't be inferred from the arguments provided, but this option spells it out")
 	cmd.Flags().BoolP("transport", "l", false, "Print important transport (TCP) info")
 	cmd.Flags().BoolP("transport-full", "L", false, "Print all transport (TCP) info")
 	cmd.Flags().BoolP("dns", "d", false, "Print important DNS info")
@@ -82,22 +87,23 @@ func appMain(cmd *cobra.Command, args []string) {
 	// - needs an actual -L / --follow-redirects CLI option
 
 	s := output.NewTtyStyler(aurora.NewAurora(true))
-	b := output.NewTtyBios(s)
+	b := output.NewTtyBios(s, hlu.Ternary(viper.GetBool("trace"), 10, 0))
 
 	tcpTarget := args[0]
 	if !utils.ServerNameConformant(viper.GetString("sni")) {
 		b.PrintErr("SNI ServerName cannot be an IP or contain a port number. Ignoring supplied value.")
 	}
+
 	requestData := state.RequestDataFromViper(s, b, probes.DnsResolverName)
-	rtData := state.DeriveRoundTripData(s, b, tcpTarget, viper.GetString("host"), viper.GetString("sni"), viper.GetString("path"), !viper.GetBool("no-tls"))
 	// TODO test all print flags with --no-tls
 
 	printOpts := &state.PrintOpts{
-		viper.GetBool("dns"), viper.GetBool("dns-full"),
-		viper.GetBool("transport"), viper.GetBool("transport-full"),
-		viper.GetBool("tls"), viper.GetBool("tls-full"),
-		viper.GetBool("head"), viper.GetBool("head-full"),
-		viper.GetBool("body"), viper.GetBool("body-full"),
+		PrintDns: viper.GetBool("dns"), PrintDnsFull: viper.GetBool("dns-full"),
+		PrintTcp: viper.GetBool("transport"), PrintTcpFull: viper.GetBool("transport-full"),
+		PrintTls: viper.GetBool("tls"), PrintTlsFull: viper.GetBool("tls-full"),
+		PrintMeta: viper.GetBool("head"), PrintMetaFull: viper.GetBool("head-full"),
+		PrintBody: viper.GetBool("body"), PrintBodyFull: viper.GetBool("body-full"),
+		Trace: viper.GetBool("trace"), Requests: viper.GetBool("requests"),
 	}
 	if printOpts.Zero() {
 		printOpts.SetDefaults()
@@ -107,6 +113,7 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	period := viper.GetUint("interval")
 	for {
+		rtData := state.DeriveRoundTripData(s, b, tcpTarget, viper.GetString("host"), viper.GetString("sni"), viper.GetString("path"), !viper.GetBool("no-tls"))
 		probes.Probe(s, b, requestData, rtData, printOpts, viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
 		if period == 0 {
 			break

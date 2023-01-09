@@ -19,11 +19,15 @@ import (
 )
 
 type PrintOpts struct {
+	// TODO drop Print
+	// TODO: make an enum
+	// TODO: Meta => Http
 	PrintDns, PrintDnsFull   bool
 	PrintTcp, PrintTcpFull   bool
 	PrintTls, PrintTlsFull   bool
 	PrintMeta, PrintMetaFull bool
 	PrintBody, PrintBodyFull bool
+	Trace, Requests          bool
 }
 
 func (pO *PrintOpts) Zero() bool {
@@ -42,6 +46,10 @@ func (pO *PrintOpts) SetDefaults() {
 }
 
 // TODO: some/all of these fields to be type Event{timestamp, value: T}
+// - actually, just for initiate and complete times (maybe a timing type, with a method for duration?)
+// - print init time with request info
+// - print complete time with summary
+// - print duration for section somewhere
 type ResponseData struct {
 	DnsSystemResolves []string
 
@@ -84,6 +92,17 @@ func (pD *ResponseData) Print(
 	rtData *RoundTripData,
 	pO *PrintOpts,
 ) {
+	// TODO: make work for aborted responses. Mostly about how we call it
+	// - work out how to test an abort in each section (and document, and script if possible)
+	//   - no internet at all (ie no routes, no local IP to initiate connections)
+	//   - internet up but no packets flow (eg all sections are conn timeout)
+	//   - DNS: dns server that is port closed / returns garbage
+	//   - TCP: port closed
+	//   - TLS: abort due to can't handshake - something (httplog) offering ancient ciphers
+	//   - HTTP Head: garbage / close pipe mid-header
+	//   - HTTP body: close pipe mid-body
+	// - probably: a "completed" bool for each section (either print its values, or "not available due to abort")
+
 	if pO.PrintDns || pO.PrintDnsFull {
 		b.Banner(fmt.Sprintf("DNS - system resolver (%s)", requestData.DnsSystemResolver))
 		fmt.Printf("TCP addresses: %s\n", s.List(pD.DnsSystemResolves, s.AddrStyle))
@@ -97,14 +116,16 @@ func (pD *ResponseData) Print(
 	if rtData.TlsEnabled && (pO.PrintTls || pO.PrintTlsFull) {
 		b.Banner("TLS")
 
-		fmt.Printf("Request: ")
-		if rtData.TlsServerName != "" {
-			fmt.Printf("SNI ServerName %s\n", s.Addr(rtData.TlsServerName))
-		} else {
-			// If an explicit --sni is given which is invalid, we'll already have error'd out
-			b.PrintWarn("Not sending SNI ServerName. Either provide one explicity with --sni, or give a --host or target that's a valid SNI.")
+		if pO.Requests {
+			fmt.Printf("Request: ")
+			if rtData.TlsServerName != "" {
+				fmt.Printf("SNI ServerName %s\n", s.Addr(rtData.TlsServerName))
+			} else {
+				// If an explicit --sni is given which is invalid, we'll already have error'd out
+				b.PrintWarn("Not sending SNI ServerName. Either provide one explicity with --sni, or give a --host or target that's a valid SNI.")
+			}
+			fmt.Println()
 		}
-		fmt.Println()
 
 		if pD.TlsClientCertRequest {
 			if requestData.TlsClientPair == nil {
@@ -151,17 +172,19 @@ func (pD *ResponseData) Print(
 	if pO.PrintMeta || pO.PrintMetaFull {
 		b.Banner("HTTP")
 
-		fmt.Printf("Request: Host %s %s %s\n", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
-		if requestData.AuthBearerToken != "" {
-			if token, err := codec.ParseJWTNoSignature(requestData.AuthBearerToken); err == nil {
-				fmt.Printf("\tPresented bearer token: ")
-				s.JWTSummary(token)
-				fmt.Println()
-			} else {
-				panic(err)
+		if pO.Requests {
+			fmt.Printf("Request: Host %s %s %s\n", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
+			if requestData.AuthBearerToken != "" {
+				if token, err := codec.ParseJWTNoSignature(requestData.AuthBearerToken); err == nil {
+					fmt.Printf("\tPresented bearer token: ")
+					s.JWTSummary(token)
+					fmt.Println()
+				} else {
+					panic(err)
+				}
 			}
+			fmt.Println()
 		}
-		fmt.Println()
 
 		fmt.Printf("%s", s.Noun(pD.HttpProto))
 		if pD.HttpStatusCode < 400 {

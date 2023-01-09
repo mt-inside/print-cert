@@ -29,13 +29,13 @@ func dnsSystem(
 		names, err := net.LookupAddr(ip.String())
 		b.CheckErr(err)
 		responseData.DnsSystemResolves = names
-		b.Trace("Provided target %s is already an IP.", ip)
+		b.TraceWithName("dns", "Provided target %s is already an IP.", ip)
 	} else {
 		ips, err := net.LookupIP(host)
 		b.CheckErr(err)
 		responseData.DnsSystemResolves = utils.MapToString(ips)
 		ip = ips[0]
-		b.Trace("Connection will use first-returned system-resolved IP: %s", ip)
+		b.TraceWithName("dns", "Connection will use first-returned system-resolved IP", "IP", ip)
 	}
 }
 
@@ -104,10 +104,10 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, name str
 serversLoop:
 	for _, serverHost := range dnsConfig.Servers {
 		server = net.JoinHostPort(serverHost, dnsConfig.Port)
-		b.Trace("Trying DNS server", "addr", server)
+		b.TraceWithName("dns", "Trying server", "addr", server)
 
 		for _, name := range names {
-			b.Trace("Trying search path item", "fqdn", name)
+			b.TraceWithName("dns", "Trying search path item", "fqdn", name)
 
 			/* v4 */
 
@@ -230,7 +230,7 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip ne
 	revIP, err := dns.ReverseAddr(ip.String())
 	b.CheckErr(err)
 
-	b.Trace("Resolving in reverse-zone", "address", revIP)
+	b.TraceWithName("dns", "Resolving in reverse-zone", "address", revIP)
 
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	b.CheckErr(err)
@@ -245,7 +245,7 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip ne
 serversLoop:
 	for _, serverHost := range dnsConfig.Servers {
 		server = net.JoinHostPort(serverHost, dnsConfig.Port)
-		b.Trace("Trying DNS server", "addr", server)
+		b.TraceWithName("dns", "Trying server", "addr", server)
 
 		m := new(dns.Msg)
 		// By default this sets the flag to ask whatever server is configured to recurse for us. We could manually recurse, either continually against the system server (thus using its cache), or from the root servers down. However both are a huge amount of work for no gain

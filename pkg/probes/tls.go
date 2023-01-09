@@ -1,13 +1,9 @@
 package probes
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"net"
 	"net/http"
-	"syscall"
-	"time"
 
 	"github.com/MarshallWace/go-spnego"
 
@@ -28,28 +24,7 @@ func buildTlsClient(
 	tr := &spnego.Transport{
 		NoCanonicalize: true,
 		Transport: http.Transport{
-			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-				dialer := &net.Dialer{
-					Timeout:   requestData.Timeout,
-					KeepAlive: 60 * time.Second,
-					// Note: happens "after creating the network connection but before actually dialing."
-					Control: func(network, address string, rawConn syscall.RawConn) error {
-						responseData.TransportDialTime = time.Now()
-						b.Trace("Dialing", "addr", address)
-
-						return nil
-					},
-				}
-				conn, err := dialer.DialContext(ctx, network, address)
-				b.CheckErr(err)
-
-				b.Trace("Connected", "to", conn.RemoteAddr(), "from", conn.LocalAddr())
-				responseData.TransportConnTime = time.Now()
-				responseData.TransportLocalAddr = conn.LocalAddr()
-				responseData.TransportRemoteAddr = conn.RemoteAddr()
-
-				return conn, err
-			},
+			DialContext:           getDialContext(s, b, requestData, responseData),
 			TLSHandshakeTimeout:   requestData.Timeout, // assume this is just the TLS handshake ie tcp handshake is covered by the dialer
 			ResponseHeaderTimeout: requestData.Timeout,
 			DisableCompression:    true,
@@ -63,7 +38,7 @@ func buildTlsClient(
 				ServerName:         rtData.TlsServerName, // SNI for TLS vhosting
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 					responseData.TlsClientCertRequest = true
-					b.Trace("TLS: Asked for a client certificate")
+					b.TraceWithName("tls", "Asked for a client certificate")
 
 					if requestData.TlsClientPair == nil {
 						return &tls.Certificate{}, nil
@@ -79,7 +54,7 @@ func buildTlsClient(
 				// - By the same token, verifiedChains is always empty (we manually call that validation function later, when it wouldn't cause a connection abort)
 				// - We're asked to give any other opinions on them
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-					b.Trace("TLS: built-in cert verification finished (no-op)")
+					b.TraceWithName("tls", "Built-in cert verification finished (no-op)")
 
 					// For maximum purity we'd save the presented certs in this callback, but
 					// - a) we'd have to parse them ourselves, and idk how much nuance there is in that, and
@@ -95,7 +70,7 @@ func buildTlsClient(
 				// - One last chance to reject the connection
 				// - I think all cert checking can be done above, so this is about objecting to the negotiated ALPN protocol or cypher suite or whatever
 				VerifyConnection: func(cs tls.ConnectionState) error {
-					b.Trace("TLS: handshake complete")
+					b.TraceWithName("tls", "Handshake complete")
 
 					responseData.TlsAgreedVersion = cs.Version
 					responseData.TlsAgreedCipherSuite = cs.CipherSuite
