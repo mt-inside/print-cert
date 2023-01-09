@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"syscall"
+	"time"
 
 	"github.com/mt-inside/print-cert/pkg/build"
 	"github.com/mt-inside/print-cert/pkg/state"
@@ -13,6 +16,31 @@ import (
 	"github.com/mt-inside/http-log/pkg/output"
 	hlu "github.com/mt-inside/http-log/pkg/utils"
 )
+
+func getDialContext(s output.TtyStyler, b output.Bios, requestData *state.RequestData, responseData *state.ResponseData) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		dialer := &net.Dialer{
+			Timeout:   requestData.Timeout,
+			KeepAlive: 60 * time.Second,
+			// Note: happens "after creating the network connection but before actually dialing."
+			Control: func(network, address string, rawConn syscall.RawConn) error {
+				responseData.TransportDialTime = time.Now()
+				b.TraceWithName("transport", "Dialing", "addr", address)
+
+				return nil
+			},
+		}
+		conn, err := dialer.DialContext(ctx, network, address)
+		b.CheckErr(err)
+
+		b.TraceWithName("transport", "Connected", "to", conn.RemoteAddr(), "from", conn.LocalAddr())
+		responseData.TransportConnTime = time.Now()
+		responseData.TransportLocalAddr = conn.LocalAddr()
+		responseData.TransportRemoteAddr = conn.RemoteAddr()
+
+		return conn, err
+	}
+}
 
 func getCheckRedirect(s output.TtyStyler, b output.Bios, requestData *state.RequestData, responseData *state.ResponseData) func(*http.Request, []*http.Request) error {
 	// NB: when testing this
@@ -71,8 +99,6 @@ func Probe(
 			requestData,
 			rtData,
 			printOpts,
-			// TODO: make printing of request info optional (can be inferred from the args but can be useful to have it spelled out)
-			// TODO: make it possible to turn b.Trace output on/off
 		)
 
 		/* Redirect */

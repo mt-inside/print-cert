@@ -40,7 +40,7 @@ const (
 
 func main() {
 	s := output.NewTtyStyler(aurora.NewAurora(true))
-	b := output.NewTtyBios(s)
+	b := output.NewTtyBios(s, 10)
 
 	resolver, err := goresolver.NewResolver("/etc/resolv.conf")
 	b.CheckErr(err)
