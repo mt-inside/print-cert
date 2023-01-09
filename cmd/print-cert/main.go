@@ -98,11 +98,11 @@ func appMain(cmd *cobra.Command, args []string) {
 	// TODO test all print flags with --no-tls
 
 	printOpts := &state.PrintOpts{
-		PrintDns: viper.GetBool("dns"), PrintDnsFull: viper.GetBool("dns-full"),
-		PrintTcp: viper.GetBool("transport"), PrintTcpFull: viper.GetBool("transport-full"),
-		PrintTls: viper.GetBool("tls"), PrintTlsFull: viper.GetBool("tls-full"),
-		PrintHttp: viper.GetBool("http"), PrintHttpFull: viper.GetBool("http-full"),
-		PrintBody: viper.GetBool("body"), PrintBodyFull: viper.GetBool("body-full"),
+		Dns: viper.GetBool("dns"), DnsFull: viper.GetBool("dns-full"),
+		Tcp: viper.GetBool("transport"), TcpFull: viper.GetBool("transport-full"),
+		Tls: viper.GetBool("tls"), TlsFull: viper.GetBool("tls-full"),
+		Http: viper.GetBool("http"), HttpFull: viper.GetBool("http-full"),
+		Body: viper.GetBool("body"), BodyFull: viper.GetBool("body-full"),
 		Trace: viper.GetBool("trace"), Requests: viper.GetBool("requests"),
 	}
 	if printOpts.Zero() {
