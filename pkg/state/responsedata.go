@@ -19,29 +19,28 @@ import (
 )
 
 type PrintOpts struct {
-	// TODO drop Print
 	// TODO: make an enum
-	PrintDns, PrintDnsFull   bool
-	PrintTcp, PrintTcpFull   bool
-	PrintTls, PrintTlsFull   bool
-	PrintHttp, PrintHttpFull bool
-	PrintBody, PrintBodyFull bool
-	Trace, Requests          bool
+	Dns, DnsFull    bool
+	Tcp, TcpFull    bool
+	Tls, TlsFull    bool
+	Http, HttpFull  bool
+	Body, BodyFull  bool
+	Trace, Requests bool
 }
 
 func (pO *PrintOpts) Zero() bool {
-	return !(pO.PrintDns || pO.PrintDnsFull ||
-		pO.PrintTcp || pO.PrintTcpFull ||
-		pO.PrintTls || pO.PrintTlsFull ||
-		pO.PrintHttp || pO.PrintHttpFull ||
-		pO.PrintBody || pO.PrintBodyFull)
+	return !(pO.Dns || pO.DnsFull ||
+		pO.Tcp || pO.TcpFull ||
+		pO.Tls || pO.TlsFull ||
+		pO.Http || pO.HttpFull ||
+		pO.Body || pO.BodyFull)
 }
 func (pO *PrintOpts) SetDefaults() {
-	pO.PrintDns = true
-	pO.PrintTcp = true
-	pO.PrintTls = true
-	pO.PrintHttp = true
-	pO.PrintBody = true
+	pO.Dns = true
+	pO.Tcp = true
+	pO.Tls = true
+	pO.Http = true
+	pO.Body = true
 }
 
 // TODO: some/all of these fields to be type Event{timestamp, value: T}
@@ -102,17 +101,17 @@ func (pD *ResponseData) Print(
 	//   - HTTP body: close pipe mid-body
 	// - probably: a "completed" bool for each section (either print its values, or "not available due to abort")
 
-	if pO.PrintDns || pO.PrintDnsFull {
+	if pO.Dns || pO.DnsFull {
 		b.Banner(fmt.Sprintf("DNS - system resolver (%s)", requestData.DnsSystemResolver))
 		fmt.Printf("TCP addresses: %s\n", s.List(pD.DnsSystemResolves, s.AddrStyle))
 	}
 
-	if pO.PrintTcp || pO.PrintTcpFull {
+	if pO.Tcp || pO.TcpFull {
 		b.Banner("TCP")
 		fmt.Printf("Connected %s -> %s\n", s.Addr(pD.TransportLocalAddr.String()), s.Addr(pD.TransportRemoteAddr.String()))
 	}
 
-	if rtData.TlsEnabled && (pO.PrintTls || pO.PrintTlsFull) {
+	if rtData.TlsEnabled && (pO.Tls || pO.TlsFull) {
 		b.Banner("TLS")
 
 		if pO.Requests {
@@ -132,7 +131,7 @@ func (pD *ResponseData) Print(
 			} else {
 				//need a deamonData with these thigns in (reused)
 				fmt.Println("Presenting client cert chain")
-				if pO.PrintTlsFull {
+				if pO.TlsFull {
 					s.ClientCertChain(codec.ChainFromCertificate(requestData.TlsClientPair))
 				}
 			}
@@ -148,7 +147,7 @@ func (pD *ResponseData) Print(
 		// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
 		// If caCert is nil ServingCertChainVerified() will use system roots to verify
 		// The name given is verified against the cert.
-		s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, pO.PrintTlsFull)
+		s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, pO.TlsFull)
 
 		/* TLS agreement summary */
 
@@ -168,7 +167,7 @@ func (pD *ResponseData) Print(
 
 	}
 
-	if pO.PrintHttp || pO.PrintHttpFull {
+	if pO.Http || pO.HttpFull {
 		b.Banner("HTTP")
 
 		if pO.Requests {
@@ -196,7 +195,7 @@ func (pD *ResponseData) Print(
 		fmt.Printf(" from %s", s.OptionalString(pD.HttpHeaders.Get("server"), s.NounStyle))
 		fmt.Println()
 
-		if !pO.PrintHttpFull {
+		if !pO.HttpFull {
 			fmt.Printf("\tclaimed %s bytes of %s\n", s.Bright(strconv.FormatInt(int64(pD.HttpContentLength), 10)), s.Noun(pD.HttpHeaders.Get("content-type")))
 			if pD.HttpCompressed {
 				fmt.Printf("\tcontent was transparently decompressed; length information will not be accurate\n")
@@ -209,7 +208,7 @@ func (pD *ResponseData) Print(
 		}
 	}
 
-	if pO.PrintBody || pO.PrintBodyFull {
+	if pO.Body || pO.BodyFull {
 		b.Banner("Body")
 		bodyLen := len(pD.BodyBytes)
 
@@ -218,7 +217,7 @@ func (pD *ResponseData) Print(
 		fmt.Println()
 
 		printLen := usvc.MinInt(bodyLen, 72)
-		if pO.PrintBodyFull {
+		if pO.BodyFull {
 			printLen = bodyLen
 		}
 
