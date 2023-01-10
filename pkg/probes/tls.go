@@ -78,7 +78,6 @@ func buildTlsClient(
 					responseData.TlsAgreedALPN = cs.NegotiatedProtocol
 					responseData.TlsOCSPStapled = len(cs.OCSPResponse) > 0
 
-					// TODO: verify servername == our requested sni.
 					responseData.TlsServerCerts = cs.PeerCertificates
 					if rtData.TlsServerName != "" && cs.ServerName != rtData.TlsServerName {
 						b.PrintErr("TLS handshake's ServerName " + cs.ServerName + " does not equal requested " + rtData.TlsServerName)
