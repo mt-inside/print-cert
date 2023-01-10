@@ -174,15 +174,20 @@ func (pD *ResponseData) Print(
 		// TODO: useful TLS info checklist
 		// - [x] HSTS
 		// - [x] OCSP pinning
-		// - [ ] HPKP: obsolete, but may as well print it if it's present (not print anything when it's not)
+		// - [x] HPKP: obsolete, but may as well print it if it's present (not print anything when it's not)
 		// - [ ] Certificate Transparency: understand it, do stuff. Is a header? Is also stuff in the OCSP bundle?
 		// - [ ] DNS CAA records: should investigate and print in the TLS section
+		// - [ ] DANE
 		// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
 		fmt.Printf("%s handshake complete with %s\n", s.Noun(output.TLSVersionName(pD.TlsAgreedVersion)), s.Addr(pD.TlsServerName))
 		fmt.Printf("\tSymmetric cypher suite %s\n", s.Noun(tls.CipherSuiteName(pD.TlsAgreedCipherSuite)))
 		fmt.Printf("\tALPN proto %s\n", s.OptionalString(pD.TlsAgreedALPN, s.NounStyle))
 		fmt.Printf("\tOCSP info stapled to response? %s\n", s.YesNo(pD.TlsOCSPStapled))
 		fmt.Printf("\tHSTS? %s\n", s.YesNo(pD.HttpHeaders.Get("Strict-Transport-Security") != ""))
+		if pD.HttpHeaders.Get("Public-Key-Pins") != "" || pD.HttpHeaders.Get("Public-Key-Pins-Report-Only") != "" {
+			// Don't print an angry red "no" if not present, because it's obsolete
+			fmt.Printf("\tHPKP? %s\n", s.Ok("yes (Not currently parsed or validated)"))
+		}
 		fmt.Println()
 
 	}
