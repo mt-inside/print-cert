@@ -72,6 +72,12 @@ func buildTlsClient(
 				VerifyConnection: func(cs tls.ConnectionState) error {
 					b.TraceWithName("tls", "Handshake complete")
 
+					// In the case of a handshake error, depending on where the server bails, none, some, or all of these callbacks get called
+					// No "tls code" is handed an error; http::Client.Do is given one, so we have to infer things from what's called
+					// Eg it's possible for this to be called and have every field be valid, but still not complete handshake
+					// Or it's possible for even the first callback to never even be called
+					responseData.TlsComplete = true // There's cs.HandshakeComplete, but it remains false in this function - presumably it's set for later consumers, upon successful return of this function
+
 					responseData.TlsAgreedVersion = cs.Version
 					responseData.TlsAgreedCipherSuite = cs.CipherSuite
 					// Would be nice to print the key exchange algo used but it's not available to us, and indeed all the code relating to it is non-exported from golang's crypto package
