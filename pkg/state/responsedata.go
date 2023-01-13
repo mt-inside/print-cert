@@ -71,6 +71,7 @@ func printOptsDefault() (pO PrintOpts) {
 type ResponseData struct {
 	DnsSystemResolves []string
 
+	TransportError      error
 	TransportConnNo     uint
 	TransportDialTime   time.Time
 	TransportConnTime   time.Time
@@ -87,7 +88,9 @@ type ResponseData struct {
 	TlsServerName        string
 	TlsAgreedALPN        string
 	TlsOCSPStapled       bool
+	TlsComplete          bool
 
+	HttpError         error
 	HttpProto         string
 	HttpStatusCode    int
 	HttpStatusMessage string
@@ -95,6 +98,7 @@ type ResponseData struct {
 	HttpContentLength int64
 	HttpCompressed    bool
 
+	BodyError error
 	BodyBytes []byte
 
 	RedirectTarget *url.URL
@@ -112,13 +116,13 @@ func (pD *ResponseData) Print(
 ) {
 	// TODO: make work for aborted responses. Mostly about how we call it
 	// - work out how to test an abort in each section (and document, and script if possible)
-	//   - no internet at all (ie no routes, no local IP to initiate connections)
-	//   - internet up but no packets flow (eg all sections are conn timeout)
-	//   - DNS: dns server that is port closed / returns garbage
-	//   - TCP: port closed
-	//   - TLS: abort due to can't handshake - something (httplog) offering ancient ciphers
-	//   - HTTP Head: garbage / close pipe mid-header
-	//   - HTTP body: close pipe mid-body
+	//   - [ ] no internet at all (ie no routes, no local IP to initiate connections)
+	//   - [ ] internet up but no packets flow (eg all sections are conn timeout)
+	//   - [ ] DNS: dns server that is port closed / returns garbage
+	//   - [x] TCP: port closed
+	//   - [x] TLS: abort due to can't handshake - something (httplog) offering ancient ciphers
+	//   - [x] HTTP Head: garbage / close pipe mid-header
+	//   - [x] HTTP body: close pipe mid-body - don't think this is ever an error?
 	// - probably: a "completed" bool for each section (either print its values, or "not available due to abort")
 
 	if pO.Dns || pO.DnsFull {
@@ -128,11 +132,17 @@ func (pD *ResponseData) Print(
 
 	if pO.Tcp || pO.TcpFull {
 		b.Banner("TCP")
+		b.CheckErr(pD.TransportError)
+
 		fmt.Printf("Connected %s -> %s\n", s.Addr(pD.TransportLocalAddr.String()), s.Addr(pD.TransportRemoteAddr.String()))
 	}
 
 	if rtData.TlsEnabled && (pO.Tls || pO.TlsFull) {
 		b.Banner("TLS")
+
+		if !pD.TlsComplete {
+			b.PrintWarn("TLS handshake did not complete. It can fail at any point, so all, some, or none of the following might be incomplete")
+		}
 
 		if pO.Requests {
 			fmt.Printf("Request: ")
@@ -160,7 +170,7 @@ func (pD *ResponseData) Print(
 
 		/* Print cert chain */
 
-		fmt.Println("Received serving cert chain")
+		fmt.Println("Serving cert chain")
 
 		// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
 		// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
@@ -194,6 +204,7 @@ func (pD *ResponseData) Print(
 
 	if pO.Http || pO.HttpFull {
 		b.Banner("HTTP")
+		b.CheckErr(pD.HttpError)
 
 		if pO.Requests {
 			fmt.Printf("Request: Host %s %s %s\n", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
@@ -235,8 +246,9 @@ func (pD *ResponseData) Print(
 
 	if pO.Body || pO.BodyFull {
 		b.Banner("Body")
-		bodyLen := len(pD.BodyBytes)
+		b.CheckErr(pD.BodyError)
 
+		bodyLen := len(pD.BodyBytes)
 		fmt.Printf("%s bytes of body actually read\n", s.Bright(strconv.FormatInt(int64(bodyLen), 10)))
 		fmt.Printf("Valid utf-8? %s\n", s.YesNo(utf8.Valid(pD.BodyBytes)))
 		fmt.Println()

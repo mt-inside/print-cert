@@ -31,7 +31,10 @@ func getDialContext(s output.TtyStyler, b output.Bios, requestData *state.Reques
 			},
 		}
 		conn, err := dialer.DialContext(ctx, network, address)
-		b.CheckErr(err)
+		if err != nil {
+			responseData.TransportError = err
+			return nil, err
+		}
 
 		b.TraceWithName("transport", "Connected", "to", conn.RemoteAddr(), "from", conn.LocalAddr())
 		responseData.TransportConnTime = time.Now()
@@ -82,7 +85,7 @@ func Probe(
 			dnsManual(s, b, requestData, rtData, responseData)
 		}
 
-		probe(s, b, responseData, client, request, readBody)
+		httpRoundTrip(s, b, responseData, client, request, readBody)
 		body = responseData.BodyBytes
 
 		/* Print */
@@ -154,7 +157,7 @@ func buildHttpRequest(
 	return req, cancel
 }
 
-func probe(
+func httpRoundTrip(
 	s output.TtyStyler,
 	b output.Bios,
 	responseData *state.ResponseData,
@@ -163,9 +166,14 @@ func probe(
 	readBody bool, // performance optimisation
 ) {
 	resp, err := client.Do(req)
-	b.CheckErr(err)
+	if err != nil {
+		responseData.HttpError = err
+		return
+	}
+
 	defer resp.Body.Close()
 
+	b.TraceWithName("http", "Metadata round trip done", "headers", len(resp.Header))
 	responseData.HttpProto = resp.Proto
 	responseData.HttpStatusCode = resp.StatusCode
 	responseData.HttpStatusMessage = resp.Status
@@ -175,7 +183,12 @@ func probe(
 
 	if readBody {
 		rawBody, err := io.ReadAll(resp.Body)
-		b.CheckErr(err)
+		if err != nil {
+			responseData.BodyError = err
+			return
+		}
+
+		b.TraceWithName("http", "Body read complete", "bytes", len(rawBody))
 		responseData.BodyBytes = rawBody
 	}
 }
