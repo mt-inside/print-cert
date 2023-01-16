@@ -72,7 +72,6 @@ type ResponseData struct {
 	DnsSystemResolves []string
 
 	TransportError      error
-	TransportConnNo     uint
 	TransportDialTime   time.Time
 	TransportConnTime   time.Time
 	TransportRemoteAddr net.Addr
@@ -92,7 +91,7 @@ type ResponseData struct {
 
 	HttpError         error
 	HttpProto         string
-	HttpStatusCode    int
+	HttpStatusCode    int // stdlib has no special type for this
 	HttpStatusMessage string
 	HttpHeaders       http.Header
 	HttpContentLength int64
