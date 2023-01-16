@@ -126,7 +126,9 @@ func (pD *ResponseData) Print(
 	// - probably: a "completed" bool for each section (either print its values, or "not available due to abort")
 
 	if pO.Dns || pO.DnsFull {
-		b.Banner(fmt.Sprintf("DNS - system resolver (%s)", requestData.DnsSystemResolver))
+		b.Banner("DNS")
+		fmt.Print(s.Info("Using the Go stdlib lookup functions (rather than manual queries). Which, in this build, are calling...\n").String())
+		fmt.Printf("Resovler: %s.\n", s.Noun(requestData.DnsSystemResolver))
 		fmt.Printf("TCP addresses: %s\n", s.List(pD.DnsSystemResolves, s.AddrStyle))
 	}
 
