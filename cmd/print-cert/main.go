@@ -115,8 +115,6 @@ func appMain(cmd *cobra.Command, args []string) {
 	requestData := state.RequestDataFromViper(s, b, probes.DnsResolverName)
 	printOpts := state.PrintOptsFromViper()
 
-	// TODO test all print flags with --no-tls
-
 	/* Execute */
 
 	period := viper.GetUint("interval")
