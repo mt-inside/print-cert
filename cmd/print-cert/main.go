@@ -37,20 +37,25 @@ func main() {
 		Run:  appMain,
 	}
 
-	// TODO: viper does flag groups? for help printing purposes
+	// pflag doesn't support flag groups, but we can at least preserve a grouped order
+	cmd.Flags().SortFlags = false
 
 	/* Request */
 	cmd.Flags().StringP("sni", "s", "", "TLS SNI ServerName")
 	cmd.Flags().StringP("host", "a", "", "HTTP Host / :authority header")
 	cmd.Flags().StringP("path", "p", "/", "HTTP path to request")
 	cmd.Flags().Duration("timeout", 5*time.Second, "Timeout for each individual network operation")
+
+	/* TLS and auth */
+	cmd.Flags().BoolP("no-tls", "P", false, "Make a plaintext 'HTTP' connection rather than a TLS 'HTTPS' connection")
+	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate")
+	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate")
+	cmd.Flags().StringP("key", "k", "", "Path to TLS client key")
+	cmd.Flags().String("bearer", "", "Path to file whose contents should be used as Authorization: Bearer token")
+	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
 	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (no attempt to negotiate http2")
 
 	/* Output */
-	// Recall: it's --foo=false for Viper, not --no-foo
-	cmd.Flags().BoolP("trace", "v", false, "Trace requests/responses as they happen, in addition to printing info at the end")
-	cmd.Flags().BoolP("requests", "V", true, "Print summary of the requests being sent. Nothing that can't be inferred from the arguments provided, but this option spells it out")
-
 	cmd.Flags().BoolP("transport", "l", false, "Print important transport (TCP) info")
 	cmd.Flags().BoolP("transport-full", "L", false, "Print all transport (TCP) info")
 	cmd.Flags().BoolP("dns", "d", false, "Print important DNS info")
@@ -62,13 +67,9 @@ func main() {
 	cmd.Flags().BoolP("body", "b", false, "Print truncated HTTP response body")
 	cmd.Flags().BoolP("body-full", "B", false, "Print full HTTP response body")
 
-	/* TLS and auth */
-	cmd.Flags().BoolP("no-tls", "P", false, "Make a plaintext 'HTTP' connection rather than a TLS 'HTTPS' connection")
-	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate")
-	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate")
-	cmd.Flags().StringP("key", "k", "", "Path to TLS client key")
-	cmd.Flags().String("bearer", "", "Path to file whose contents should be used as Authorization: Bearer token")
-	cmd.Flags().BoolP("kerberos", "n", false, "Negotiate Kerberos auth")
+	// Recall: it's --foo=false for Viper, not --no-foo
+	cmd.Flags().BoolP("requests", "V", true, "Print summary of the requests being sent. Nothing that can't be inferred from the arguments provided, but this option spells it out")
+	cmd.Flags().BoolP("trace", "v", false, "Trace requests/responses as they happen, in addition to printing info at the end")
 
 	/* Command */
 	cmd.Flags().IntP("interval", "r", 0, "Repeat the probe every n seconds. Not provided / 0 means don't repeat")
