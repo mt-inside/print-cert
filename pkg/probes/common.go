@@ -22,10 +22,10 @@ func getDialContext(s output.TtyStyler, b output.Bios, requestData *state.Reques
 		dialer := &net.Dialer{
 			Timeout:   requestData.Timeout,
 			KeepAlive: 60 * time.Second,
-			// Note: happens "after creating the network connection but before actually dialing."
+			// Happens "after creating the network connection but before actually dialing."
 			Control: func(network, address string, rawConn syscall.RawConn) error {
-				responseData.TransportDialTime = time.Now()
-				b.TraceWithName("transport", "Dialing", "addr", address)
+				responseData.StartTime = time.Now() // we use this time, which is _some time_ before the syn is sent, as start time. We do so because even on a fast machine it's 0.5ms after we call client.Do(), which is a longer delay than the actual TCP handshake over loopback. So while not totally acurate, it's more acurate.
+				b.TraceWithName("transport", "Dialing", "net", network, "addr", address)
 
 				return nil
 			},
@@ -174,6 +174,7 @@ func httpRoundTrip(
 	defer resp.Body.Close()
 
 	b.TraceWithName("http", "Metadata round trip done", "headers", len(resp.Header))
+	responseData.HttpHeadersTime = time.Now()
 	responseData.HttpProto = resp.Proto
 	responseData.HttpStatusCode = resp.StatusCode
 	responseData.HttpStatusMessage = resp.Status
@@ -187,7 +188,7 @@ func httpRoundTrip(
 			responseData.BodyError = err
 			return
 		}
-
+		responseData.BodyCompleteTime = time.Now()
 		b.TraceWithName("http", "Body read complete", "bytes", len(rawBody))
 		responseData.BodyBytes = rawBody
 	}

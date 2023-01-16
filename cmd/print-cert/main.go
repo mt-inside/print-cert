@@ -69,6 +69,7 @@ func main() {
 
 	// Recall: it's --foo=false for Viper, not --no-foo
 	cmd.Flags().BoolP("requests", "V", true, "Print summary of the requests being sent. Nothing that can't be inferred from the arguments provided, but this option spells it out")
+	cmd.Flags().StringP("timestamps", "", "none", "Print timestamps: none, abs, rel.")
 	cmd.Flags().BoolP("trace", "v", false, "Trace requests/responses as they happen, in addition to printing info at the end")
 
 	/* Command */
@@ -113,6 +114,12 @@ func appMain(cmd *cobra.Command, args []string) {
 		b.PrintWarn("tls printing options have no effect when TLS is disabled")
 	}
 
+	// Shame pflag can't do this for us.
+	timestamps := viper.GetString("timestamps")
+	if timestamps != "none" && timestamps != "abs" && timestamps != "rel" {
+		b.PrintErr("--timestamps value invalid")
+	}
+
 	requestData := state.RequestDataFromViper(s, b, probes.DnsResolverName)
 	printOpts := state.PrintOptsFromViper()
 
@@ -121,7 +128,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	period := viper.GetUint("interval")
 	for {
 		rtData := state.DeriveRoundTripData(s, b, tcpTarget, viper.GetString("host"), viper.GetString("sni"), viper.GetString("path"), !viper.GetBool("no-tls"))
-		probes.Probe(s, b, requestData, rtData, printOpts, viper.GetBool("dns-full"), viper.GetBool("body") || viper.GetBool("body-full"))
+		probes.Probe(s, b, requestData, rtData, printOpts, viper.GetBool("dns-full"), printOpts.Body || printOpts.BodyFull)
 		if period == 0 {
 			break
 		}

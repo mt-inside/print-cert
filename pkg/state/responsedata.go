@@ -27,25 +27,40 @@ type PrintOpts struct {
 	Http, HttpFull  bool
 	Body, BodyFull  bool
 	Trace, Requests bool
+	Timestamps      output.TimestampType
 }
 
-func PrintOptsFromViper() (pO PrintOpts) {
-	pO = PrintOpts{
+func PrintOptsFromViper() PrintOpts {
+	var ts output.TimestampType
+	switch viper.GetString("timestamps") {
+	case "none":
+		ts = output.TimestampNone
+	case "abs":
+		ts = output.TimestampAbsolute
+	case "rel":
+		ts = output.TimestampRelative
+	default:
+		panic("Unknown timestamp option (input to this function should be sanitised)")
+	}
+
+	pO := &PrintOpts{
 		Dns: viper.GetBool("dns"), DnsFull: viper.GetBool("dns-full"),
 		Tcp: viper.GetBool("transport"), TcpFull: viper.GetBool("transport-full"),
 		Tls: viper.GetBool("tls"), TlsFull: viper.GetBool("tls-full"),
 		Http: viper.GetBool("http"), HttpFull: viper.GetBool("http-full"),
 		Body: viper.GetBool("body"), BodyFull: viper.GetBool("body-full"),
+
 		Trace: viper.GetBool("trace"), Requests: viper.GetBool("requests"),
+		Timestamps: ts,
 	}
 	if pO.Zero() {
-		pO = printOptsDefault()
+		pO.Defaults()
 	}
 
-	return
+	return *pO
 }
 
-func (pO PrintOpts) Zero() bool {
+func (pO *PrintOpts) Zero() bool {
 	// Having PrintOpts be an enum would make this function sexier, but overall it's harder (Enums in Go suck)
 	return !(pO.Dns || pO.DnsFull ||
 		pO.Tcp || pO.TcpFull ||
@@ -53,7 +68,7 @@ func (pO PrintOpts) Zero() bool {
 		pO.Http || pO.HttpFull ||
 		pO.Body || pO.BodyFull)
 }
-func printOptsDefault() (pO PrintOpts) {
+func (pO *PrintOpts) Defaults() {
 	pO.Dns = true
 	pO.Tcp = true
 	pO.Tls = true
@@ -63,33 +78,38 @@ func printOptsDefault() (pO PrintOpts) {
 	return
 }
 
-// TODO: some/all of these fields to be type Event{timestamp, value: T}
-// - actually, just for initiate and complete times (maybe a timing type, with a method for duration?)
-// - print init time with request info
-// - print complete time with summary
-// - print duration for section somewhere
+/* On timestamps:
+* - We can't time every field, the protocols don't work like that
+* - What we want to time is each step of the protocols thus related groups of data
+* - What we _can_ time is when Go calls our callbacks, which is a close-ish approximation to that, modulo some quirks in the ways it handles various protocols
+* - Haven't bothered with a Timing{T, time.Time} type for the timed things, because there's only a few of them that are
+ */
 type ResponseData struct {
+	StartTime time.Time
+
 	DnsSystemResolves []string
 
 	TransportError      error
-	TransportDialTime   time.Time
 	TransportConnTime   time.Time
 	TransportRemoteAddr net.Addr
 	TransportLocalAddr  net.Addr
 
-	TlsClientCertRequest bool
+	TlsClientCertRequest     bool
+	TlsClientCertRequestTime time.Time
 
-	TlsServerCerts []*x509.Certificate
+	TlsServerCerts     []*x509.Certificate
+	TlsServerCertsTime time.Time
 
-	TlsAgreedTime        *time.Time
+	TlsComplete bool
+	// There is no way to know handshake complete time. VerifyConnection isn't it, cause it's actually called before we send the client cert in (qv)
 	TlsAgreedVersion     uint16
 	TlsAgreedCipherSuite uint16
 	TlsServerName        string
 	TlsAgreedALPN        string
 	TlsOCSPStapled       bool
-	TlsComplete          bool
 
 	HttpError         error
+	HttpHeadersTime   time.Time
 	HttpProto         string
 	HttpStatusCode    int // stdlib has no special type for this
 	HttpStatusMessage string
@@ -97,8 +117,9 @@ type ResponseData struct {
 	HttpContentLength int64
 	HttpCompressed    bool
 
-	BodyError error
-	BodyBytes []byte
+	BodyError        error
+	BodyCompleteTime time.Time
+	BodyBytes        []byte
 
 	RedirectTarget *url.URL
 }
@@ -135,7 +156,12 @@ func (pD *ResponseData) Print(
 		b.Banner("TCP")
 		b.CheckErr(pD.TransportError)
 
-		fmt.Printf("Connected %s -> %s\n", s.Addr(pD.TransportLocalAddr.String()), s.Addr(pD.TransportRemoteAddr.String()))
+		fmt.Printf(
+			"%sConnected %s -> %s\n",
+			s.Timestamp(pD.TransportConnTime, pO.Timestamps, &pD.StartTime),
+			s.Addr(pD.TransportLocalAddr.String()),
+			s.Addr(pD.TransportRemoteAddr.String()),
+		)
 	}
 
 	if rtData.TlsEnabled && (pO.Tls || pO.TlsFull) {
@@ -156,7 +182,21 @@ func (pD *ResponseData) Print(
 			fmt.Println()
 		}
 
+		/* Serving cert chain */
+
+		fmt.Printf("%sServing cert chain\n", s.Timestamp(pD.TlsServerCertsTime, pO.Timestamps, &pD.StartTime))
+
+		// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
+		// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
+		// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
+		// If caCert is nil ServingCertChainVerified() will use system roots to verify
+		// The name given is verified against the cert.
+		s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, pO.TlsFull)
+
+		/* Client cert auth */
+
 		if pD.TlsClientCertRequest {
+			fmt.Print(s.Timestamp(pD.TlsClientCertRequestTime, pO.Timestamps, &pD.StartTime))
 			if requestData.TlsClientPair == nil {
 				b.PrintWarn("Server asked for a client cert but none configured (-c/-k). Not presenting a cert, this might cause the server to abort the handshake.")
 			} else {
@@ -169,17 +209,6 @@ func (pD *ResponseData) Print(
 			fmt.Println()
 		}
 
-		/* Print cert chain */
-
-		fmt.Println("Serving cert chain")
-
-		// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
-		// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
-		// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
-		// If caCert is nil ServingCertChainVerified() will use system roots to verify
-		// The name given is verified against the cert.
-		s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, pO.TlsFull)
-
 		/* TLS agreement summary */
 
 		// TODO: useful TLS info checklist
@@ -190,7 +219,10 @@ func (pD *ResponseData) Print(
 		// - [ ] DNS CAA records: should investigate and print in the TLS section
 		// - [ ] DANE
 		// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
-		fmt.Printf("%s handshake complete with %s\n", s.Noun(output.TLSVersionName(pD.TlsAgreedVersion)), s.Addr(pD.TlsServerName))
+		fmt.Printf("%s handshake complete with %s\n",
+			s.Noun(output.TLSVersionName(pD.TlsAgreedVersion)),
+			s.Addr(pD.TlsServerName),
+		)
 		fmt.Printf("\tSymmetric cypher suite %s\n", s.Noun(tls.CipherSuiteName(pD.TlsAgreedCipherSuite)))
 		fmt.Printf("\tALPN proto %s\n", s.OptionalString(pD.TlsAgreedALPN, s.NounStyle))
 		fmt.Printf("\tOCSP info stapled to response? %s\n", s.YesNo(pD.TlsOCSPStapled))
@@ -221,7 +253,7 @@ func (pD *ResponseData) Print(
 			fmt.Println()
 		}
 
-		fmt.Printf("%s", s.Noun(pD.HttpProto))
+		fmt.Printf("%s%s", s.Timestamp(pD.HttpHeadersTime, pO.Timestamps, &pD.StartTime), s.Noun(pD.HttpProto))
 		if pD.HttpStatusCode < 400 {
 			fmt.Printf(" %s", s.Ok(pD.HttpStatusMessage))
 		} else if pD.HttpStatusCode < 500 {
@@ -249,7 +281,10 @@ func (pD *ResponseData) Print(
 		b.CheckErr(pD.BodyError)
 
 		bodyLen := len(pD.BodyBytes)
-		fmt.Printf("%s bytes of body actually read\n", s.Bright(strconv.FormatInt(int64(bodyLen), 10)))
+		fmt.Printf("%s%s bytes of body actually read\n",
+			s.Timestamp(pD.BodyCompleteTime, pO.Timestamps, &pD.StartTime),
+			s.Bright(strconv.FormatInt(int64(bodyLen), 10)),
+		)
 		fmt.Printf("Valid utf-8? %s\n", s.YesNo(utf8.Valid(pD.BodyBytes)))
 		fmt.Println()
 
