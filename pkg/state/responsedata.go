@@ -239,7 +239,6 @@ func (pD *ResponseData) Print(
 				fmt.Printf("\tcontent was transparently decompressed; length information will not be accurate\n")
 			}
 		} else {
-			// TODO: use new and improved outputting for this from http-log
 			for k, vs := range pD.HttpHeaders {
 				fmt.Printf("\t%s = %v\n", s.Addr(k), s.Noun(strings.Join(vs, ",")))
 			}

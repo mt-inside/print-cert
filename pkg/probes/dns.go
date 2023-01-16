@@ -22,6 +22,9 @@ func dnsSystem(
 	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
 ) {
+	// TODO: http-log should do a reverse DNS lookup on the caller, but no more. (well, maybe geoip / AS lookup...)
+	// - should be a flag, cause that's a network request which might be firewalled and might take time
+
 	host, _ := utils.SplitHostMaybePort(rtData.TransportTarget)
 	// LookupAddr and LookupIP now equivalent except signature (https://golang-nuts.narkive.com/s2corx0l/go-nuts-net-lookuphost-vs-net-lookupip)
 	ip := net.ParseIP(host)

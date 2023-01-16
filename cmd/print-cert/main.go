@@ -37,6 +37,8 @@ func main() {
 		Run:  appMain,
 	}
 
+	// TODO: viper does flag groups? for help printing purposes
+
 	/* Request */
 	cmd.Flags().StringP("sni", "s", "", "TLS SNI ServerName")
 	cmd.Flags().StringP("host", "a", "", "HTTP Host / :authority header")
@@ -48,6 +50,7 @@ func main() {
 	// Recall: it's --foo=false for Viper, not --no-foo
 	cmd.Flags().BoolP("trace", "v", false, "Trace requests/responses as they happen, in addition to printing info at the end")
 	cmd.Flags().BoolP("requests", "V", true, "Print summary of the requests being sent. Nothing that can't be inferred from the arguments provided, but this option spells it out")
+
 	cmd.Flags().BoolP("transport", "l", false, "Print important transport (TCP) info")
 	cmd.Flags().BoolP("transport-full", "L", false, "Print all transport (TCP) info")
 	cmd.Flags().BoolP("dns", "d", false, "Print important DNS info")
@@ -86,6 +89,17 @@ func appMain(cmd *cobra.Command, args []string) {
 	// TODO Need arch:
 	// - needs an actual -L / --follow-redirects CLI option
 
+	// TODO: think about arch parity between this and http-log
+	// - "golang aparatus" strapped up to fill out state objects
+	//   - via ingest functions eg IngestTlsCS - a bunch of codec should be state-object members?
+	//   - (optional) trace as things are happening
+	// - something that prints that state (along with request/daemonState)
+	//   - NOT a state obj member, but an outputter like http-log
+	//   - print-cert probably also wants a logger version too, so it can be automated easily
+	// - all of this uses styler / bios (and are allowed to print themselves, esp the strings that styler returns)
+
+	// TODO: styler and bios to a TUI package
+	// - styler should only return strings (use stringbuffer)
 	s := output.NewTtyStyler(aurora.NewAurora(true))
 	b := output.NewTtyBios(s, hlu.Ternary(viper.GetBool("trace"), 10, 0))
 
