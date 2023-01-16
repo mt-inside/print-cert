@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"net/http"
+	"time"
 
 	"github.com/MarshallWace/go-spnego"
 
@@ -19,6 +20,22 @@ func buildTlsClient(
 	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
 ) *http.Client {
+
+	/* On the order of these callbacks:
+	 * TLS1.3 handshake is
+	 * -> ClientHello (supported versions etc)
+	 * <- ServerHello (supported versions etc)
+	 * <- CertificateRequest
+	 * <- Serving Certificate
+	 * -> Client Certificate
+	 *
+	 * Note that although the server sends the cert request before the serving cert, the client waits for both before sending in the client cert.
+	 * Golang seems to reliably call the callbacks in the following valid, but counter-intuative way:
+	 * - Serving Certificate - do you wanna object?
+	 * - Verify Connection - do you wanna object to things like symmetric cypher suite and ALPN protocol? I guess these values come from looking at Client+ServerHello, and don't depend on the client cert. It'll be cheaper to work out these set intersections than the send the client cert over the network, so Go seems to ask for confirmation of them first.
+	 * - Client Certificate Request - this happens last, see above. At this point we've agreed connection params that /would/ be used, but that's nothing sensitive. Now we give the server a chance to reject our auth and abort the handshake.
+	 * - Finished - no hook for this, not sure there's even an ack
+	 */
 
 	// Always make a krb transport, becuase if we make a plain HTTP one and try to wrap it later, we have to copy the bytes (because spnego.Transport embeds http.Transport) and that copies a sync.Mutex.
 	tr := &spnego.Transport{
@@ -37,6 +54,7 @@ func buildTlsClient(
 				Renegotiation:      tls.RenegotiateOnceAsClient,
 				ServerName:         rtData.TlsServerName, // SNI for TLS vhosting
 				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+					responseData.TlsClientCertRequestTime = time.Now()
 					responseData.TlsClientCertRequest = true
 					b.TraceWithName("tls", "Asked for a client certificate")
 
@@ -54,6 +72,7 @@ func buildTlsClient(
 				// - By the same token, verifiedChains is always empty (we manually call that validation function later, when it wouldn't cause a connection abort)
 				// - We're asked to give any other opinions on them
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+					responseData.TlsServerCertsTime = time.Now()
 					b.TraceWithName("tls", "Built-in cert verification finished (no-op)")
 
 					// For maximum purity we'd save the presented certs in this callback, but
@@ -70,13 +89,16 @@ func buildTlsClient(
 				// - One last chance to reject the connection
 				// - I think all cert checking can be done above, so this is about objecting to the negotiated ALPN protocol or cypher suite or whatever
 				VerifyConnection: func(cs tls.ConnectionState) error {
-					b.TraceWithName("tls", "Handshake complete")
+					b.TraceWithName("tls", "Connection parameter validation")
 
 					// In the case of a handshake error, depending on where the server bails, none, some, or all of these callbacks get called
 					// No "tls code" is handed an error; http::Client.Do is given one, so we have to infer things from what's called
 					// Eg it's possible for this to be called and have every field be valid, but still not complete handshake
 					// Or it's possible for even the first callback to never even be called
 					responseData.TlsComplete = true // There's cs.HandshakeComplete, but it remains false in this function - presumably it's set for later consumers, upon successful return of this function
+					// FIXME: this ^^ is really wrong, like we can get this callback, then have an aborted handshake by a server that rejects our client cert.
+					// - cs isn't a pointer, so we can't stash it from here to later inspect its HandshakeComplete
+					// - think the best bet is: TLS errors always result in the HTTP call failing. Can we grab CS there from the resp? (even if it returns error)? Use that cs.handshakeComplete to be real value
 
 					responseData.TlsAgreedVersion = cs.Version
 					responseData.TlsAgreedCipherSuite = cs.CipherSuite
