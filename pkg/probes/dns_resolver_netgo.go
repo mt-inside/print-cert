@@ -1,5 +1,7 @@
-//go:build netgo
+//go:build !cgo || netgo
 
 package probes
 
-const DnsResolverName = "netgo"
+/* See docs in ./dns_resolver_libc.go */
+
+const DnsResolverName = "netgo (native Go resolover functions)"

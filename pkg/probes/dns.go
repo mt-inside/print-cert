@@ -54,8 +54,14 @@ func dnsManual(
 	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
 ) {
-	// Ideally we'd save all this info in responseData and then print in Print(), but it's a lot of effort and this always runs in a separate phase
-	b.Banner("DNS - extra manual resolution (information only)")
+	// TODO: Ideally we'd save all this info in responseData and then print in Print(), but it's a lot of effort and this always runs in a separate phase
+	// - this is probably needed, cause DANE etc should print with tls(?)
+	b.Banner("DNS - extra manual resolution")
+	s.Info("This section is for information only; its results are not used to determine connection address.")
+	s.Info("These are hand-cranked DNS queries. DNS is hard; the results may be plain wrong.")
+	s.Info("This is DNS-only, ie no attempt to even query files, let alone any other nsswitch stuff.")
+
+	// TODO: add geoip / ASN lookup (a la envbin)
 
 	host, _ := utils.SplitHostMaybePort(rtData.TransportTarget)
 	ip := net.ParseIP(host)
