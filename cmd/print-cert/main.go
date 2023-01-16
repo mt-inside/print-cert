@@ -108,6 +108,10 @@ func appMain(cmd *cobra.Command, args []string) {
 		b.PrintErr("SNI ServerName cannot be an IP or contain a port number. Ignoring supplied value.")
 	}
 
+	if viper.GetBool("no-tls") && (viper.GetBool("tls") || viper.GetBool("tls-full")) {
+		b.PrintWarn("tls printing options have no effect when TLS is disabled")
+	}
+
 	requestData := state.RequestDataFromViper(s, b, probes.DnsResolverName)
 	printOpts := state.PrintOptsFromViper()
 
