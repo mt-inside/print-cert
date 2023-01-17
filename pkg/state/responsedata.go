@@ -53,29 +53,8 @@ func PrintOptsFromViper() PrintOpts {
 		Trace: viper.GetBool("trace"), Requests: viper.GetBool("requests"),
 		Timestamps: ts,
 	}
-	if pO.Zero() {
-		pO.Defaults()
-	}
 
 	return *pO
-}
-
-func (pO *PrintOpts) Zero() bool {
-	// Having PrintOpts be an enum would make this function sexier, but overall it's harder (Enums in Go suck)
-	return !(pO.Dns || pO.DnsFull ||
-		pO.Tcp || pO.TcpFull ||
-		pO.Tls || pO.TlsFull ||
-		pO.Http || pO.HttpFull ||
-		pO.Body || pO.BodyFull)
-}
-func (pO *PrintOpts) Defaults() {
-	pO.Dns = true
-	pO.Tcp = true
-	pO.Tls = true
-	pO.Http = true
-	pO.Body = true
-
-	return
 }
 
 /* On timestamps:
@@ -307,5 +286,10 @@ func (pD *ResponseData) Print(
 		b.Banner("Redirect")
 
 		fmt.Printf("Redirected to %s\n", s.Addr(pD.RedirectTarget.String()))
+		if requestData.FollowRedirects {
+			fmt.Println("\tfollowing...")
+		} else {
+			fmt.Println("\tNot following redirects, enable with --location")
+		}
 	}
 }

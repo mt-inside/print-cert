@@ -22,7 +22,7 @@ func buildTlsClient(
 ) *http.Client {
 
 	/* On the order of these callbacks:
-	 * TLS1.3 handshake is
+	* TLS1.3 handshake is (https://www.ibm.com/docs/en/sdk-java-technology/8?topic=handshake-tls-13-protocol)
 	 * -> ClientHello (supported versions etc)
 	 * <- ServerHello (supported versions etc)
 	 * <- CertificateRequest
@@ -35,7 +35,7 @@ func buildTlsClient(
 	 * - Verify Connection - do you wanna object to things like symmetric cypher suite and ALPN protocol? I guess these values come from looking at Client+ServerHello, and don't depend on the client cert. It'll be cheaper to work out these set intersections than the send the client cert over the network, so Go seems to ask for confirmation of them first.
 	 * - Client Certificate Request - this happens last, see above. At this point we've agreed connection params that /would/ be used, but that's nothing sensitive. Now we give the server a chance to reject our auth and abort the handshake.
 	 * - Finished - no hook for this, not sure there's even an ack
-	 */
+	*/
 
 	// Always make a krb transport, becuase if we make a plain HTTP one and try to wrap it later, we have to copy the bytes (because spnego.Transport embeds http.Transport) and that copies a sync.Mutex.
 	tr := &spnego.Transport{

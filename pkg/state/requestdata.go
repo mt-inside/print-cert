@@ -17,7 +17,8 @@ import (
 )
 
 type RequestData struct {
-	Timeout time.Duration
+	Timeout         time.Duration
+	FollowRedirects bool
 
 	// TODO: this should be on the other structure? Or just read straight from  the const tbh
 	DnsSystemResolver string
@@ -33,26 +34,25 @@ type RequestData struct {
 }
 
 func RequestDataFromViper(s output.TtyStyler, b output.Bios, dnsResolverName string) *RequestData {
-	requestData := &RequestData{}
-
-	requestData.Timeout = viper.GetDuration("timeout")
-	requestData.DnsSystemResolver = dnsResolverName
-
-	requestData.HttpMethod = "GET"
-
-	requestData.AuthKrb = viper.GetBool("kerberos")
-	requestData.HttpForce11 = viper.GetBool("http-11")
+	requestData := &RequestData{
+		Timeout:           viper.GetDuration("timeout"),
+		FollowRedirects:   viper.GetBool("location"),
+		DnsSystemResolver: dnsResolverName,
+		HttpMethod:        "GET",
+		HttpForce11:       viper.GetBool("http-11"),
+		AuthKrb:           viper.GetBool("kerberos"),
+	}
 
 	/* Load TLS material */
 
 	if viper.Get("cert") != "" || viper.Get("key") != "" {
-		pair, err := tls.LoadX509KeyPair(viper.Get("cert").(string), viper.Get("key").(string))
+		pair, err := tls.LoadX509KeyPair(viper.GetString("cert"), viper.GetString("key"))
 		b.CheckErr(err)
 		requestData.TlsClientPair = &pair
 	}
 
 	if viper.Get("ca") != "" {
-		bytes, err := os.ReadFile(viper.Get("ca").(string))
+		bytes, err := os.ReadFile(viper.GetString("ca"))
 		b.CheckErr(err)
 		requestData.TlsServingCA, err = codec.ParseCertificate(bytes)
 		b.CheckErr(err)
@@ -61,7 +61,7 @@ func RequestDataFromViper(s output.TtyStyler, b output.Bios, dnsResolverName str
 	/* Load other request files */
 
 	if viper.Get("bearer") != "" {
-		bytes, err := os.ReadFile(viper.Get("bearer").(string))
+		bytes, err := os.ReadFile(viper.GetString("bearer"))
 		b.CheckErr(err)
 		requestData.AuthBearerToken = strings.TrimSpace(string(bytes))
 	}
