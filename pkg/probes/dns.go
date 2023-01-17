@@ -9,6 +9,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/peterzen/goresolver"
 
+	"github.com/mt-inside/go-usvc"
 	"github.com/mt-inside/print-cert/pkg/state"
 
 	"github.com/mt-inside/http-log/pkg/output"
@@ -49,7 +50,6 @@ func dnsSystem(
  * - This is what we want, because we also get files etc and anything else they've added into nsswitch
  * Downside is we can't stop it trying localhost.$domain, because it doesn't know "localhost" is special - it's only special cause it's in /etc/hosts, and we can't avoid the fact that a lot of DNS servers respond for localhost.foo. when they shouldn't
  */
-// FIXME: blows up when there's no internet (ie responses are empty / nil)
 func dnsManual(
 	s output.TtyStyler,
 	b output.Bios,
@@ -71,6 +71,9 @@ func dnsManual(
 	if ip != nil {
 		// It's an IP: do reverse lookup
 		names := queryRevDNS(s, b, requestData.Timeout, ip)
+		if len(names) > 0 {
+			fmt.Println("Checking forward zone and consistency for preferred answer")
+		}
 		for _, name := range names {
 			ips, _ := queryDNS(s, b, requestData.Timeout, name)
 			if len(ips) > 0 {
@@ -80,6 +83,9 @@ func dnsManual(
 	} else {
 		// It's not an IP; assume it's a name: do forwards lookup
 		ips, fqdn := queryDNS(s, b, requestData.Timeout, host)
+		if len(ips) > 0 {
+			fmt.Println("Checking reverse zone and consistency for preferred answer")
+		}
 		for _, ip := range ips {
 			revNames := queryRevDNS(s, b, requestData.Timeout, ip)
 			if len(revNames) > 0 {
@@ -94,28 +100,41 @@ func dnsManual(
 * - cloudflare.net is DNSSEC
 * - localhost is in Files
 * - google.com has ipv6 & v4
+* - add 108.162.193.144 (theo.ns.cloudflare.com) as a system dns server then try barnard.empty.org.uk, is cool
  */
-func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, name string) ([]net.IP, string) {
+func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query string) ([]net.IP, string) {
+
+	b.TraceWithName("dns", "Doing forwards resolution", "name", query)
 
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	b.CheckErr(err)
 
-	names := dnsConfig.NameList(name)
+	// Note that when you "turn the wifi off", at least on macos, resolv.conf is rewritten with no servers, so this loop just doesn't run
+	if len(dnsConfig.Servers) == 0 {
+		b.PrintWarn("No DNS servers configured. No internet?")
+	}
 
 	c := dns.Client{
 		Dialer: &net.Dialer{Timeout: timeout},
 	}
 
-	var server string
-	var fqdn string
-	var in *dns.Msg // Just takes the value of the last one in the loop, ie the v6 AAAA answer, but servers are authoritative for /zones/ so if it's auth for v6 is it for v4 too (cause we're talking forward zones)
-	var answers []dns.RR
-serversLoop:
+	queries := dnsConfig.NameList(query)
+
+	var preferredFqdn string = query
+	var preferredAddrs []net.IP
+
 	for _, serverHost := range dnsConfig.Servers {
-		server = net.JoinHostPort(serverHost, dnsConfig.Port)
+		server := net.JoinHostPort(serverHost, dnsConfig.Port)
+		serverHit := false
 		b.TraceWithName("dns", "Trying server", "addr", server)
 
-		for _, name := range names {
+		fmt.Printf("Server %s\n", s.Addr(server))
+
+		for _, name := range queries {
+			var queryAnswers []dns.RR
+			var queryCnames map[string]string
+			var queryAddrs []net.IP
+
 			b.TraceWithName("dns", "Trying search path item", "fqdn", name)
 
 			/* v4 */
@@ -124,12 +143,13 @@ serversLoop:
 			// By default this sets the flag to ask whatever server is configured to recurse for us. We could manually recurse, either continually against the system server (thus using its cache), or from the root servers down. However both are a huge amount of work for no gain
 			m.SetQuestion(name, dns.TypeA)
 
-			in, _, err = c.Exchange(m, server)
+			in, _, err := c.Exchange(m, server)
 			if err != nil {
-				continue serversLoop
+				b.PrintWarn("Error: " + err.Error())
+				// It's UDP; just continue in the face of errors
+			} else {
+				queryAnswers = append(queryAnswers, in.Answer...)
 			}
-
-			answers = append(answers, in.Answer...)
 
 			/* v6 */
 
@@ -138,55 +158,67 @@ serversLoop:
 
 			in, _, err = c.Exchange(m, server)
 			if err != nil {
-				continue serversLoop
+				b.PrintWarn("Error: " + err.Error())
+			} else {
+				queryAnswers = append(queryAnswers, in.Answer...)
 			}
 
-			answers = append(answers, in.Answer...)
+			// We've tried all the domains on the search path, and there haven't been any errors, just no results, so it's an NXDOMAIN.
+			// - I believe this is the same as system resolution, ie next server won't be tried if there's an empty result but no error
+			// Not fatal cause we're only printing for information
+			if len(queryAnswers) > 0 {
+				serverHit = true
 
-			if len(answers) > 0 {
-				fqdn = name
-				break serversLoop
+				queryCnames, queryAddrs = buildCnameChain(queryAnswers)
+
+				/* Validate DNSSEC. Options:
+				 * - 1. implement DNSSEC validation manually (using the `dns` library and doing all the RRSIG, DNSKEY, DS queries right up to the root). This is a massive amount of work
+				 * - 2. use goresolver library (itself based on `dns`) to do that for us (but don't use it for the main queries cause we want more control and visbility)
+				 * - 3. use the system resolver to do it (local stub / router / ISP / whatever) - set the EDNS0 flag in the question and see if the right flag is in the answer
+				 *
+				 * Choice: 2 - goresolver is known to do it properly (recursive resolvers are known to *strip* DNSSEC-related records, let alone not validate them properly).
+				 *
+				 * We show DNSSEC status per server, becuase though it should be the same for all (there should be one authoritative server for the zone, and a bunch of recursive/caching servers also hosting it), some caching resolvers strip dnssec info so it's useful to see that.
+				 * We show DNSSEC status per search-path item because DNSSEC is per zone.
+				 */
+				// TODO: this library won't let us give it, or get at, the `dns` library's ClientConfig, so we can't pick which server we wanna query. Fork / PR library?
+				// Hack: redirect go's log package to null for the duration of these calls, cause this library logs.
+				usvc.DisableGoLog()
+				resolver, err := goresolver.NewResolver("/etc/resolv.conf")
+				b.CheckErr(err)
+				_, dnssecErr := resolver.StrictNSQuery(name, dns.TypeA)
+				usvc.InterceptGoLog(b.GetLogger())
+
+				/* Print */
+
+				fmt.Printf("\t") // TODO: styler should only return strings. All printing should be done by bios.Print, which takes strings (from styler, sprintf, etc), and applies the current tab level. Add b.Indent(), Dedent()
+				printCnameChain(s, b, name, queryCnames, queryAddrs)
+				// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
+				fmt.Printf(" (authoritative? %s, ttl remaining %s, dnssec? %s)\n",
+					s.YesInfo(in.Authoritative),                             // Authority is per zone, so using this last result is fine, as we loop per search domain
+					time.Duration(queryAnswers[0].Header().Ttl)*time.Second, // Each record could theoretically have different TTLs, but they're usually set zone-wide
+					s.YesError(dnssecErr),
+				)
+
+				/* Latch */
+
+				// Latch the FQDN and results given by the first server, first search domain that gives one, as that's what the system would use
+				if len(preferredAddrs) == 0 {
+					preferredFqdn = name
+					preferredAddrs = queryAddrs
+				}
 			}
 		}
-
-		//assert(len(answers) == 0)
-		// Not fatal cause we're only printing for information
-		b.PrintWarn(fmt.Sprintf("%s: NXDOMAIN", s.Addr(name)))
-		return []net.IP{}, name
-	}
-	if err != nil {
-		b.PrintWarn("All DNS servers failed.")
-		return []net.IP{}, name
+		if !serverHit {
+			fmt.Printf("\t%s: NXDOMAIN\n", s.Addr(query))
+		}
 	}
 
-	/* Validate DNSSEC. Options:
-	 * - 1. implement DNSSEC validation manually (using the dns library and doing all the RRSIG, DNSKEY, DS queries right up to the root). This is a massive amount of work
-	 * - 2. use goresolver library to do that for us (but don't use it for the main queries cause we want more control and visbility)
-	 * - 3. use the system resolver to do it (local stub / router / ISP / whatever) - set the EDNS0 flag in the question and see if the right flag is in the answer
-	 *
-	 * Choice: 2 - goresolver is known to do it properly (recursive resolvers are known to *strip* DNSSEC-related records, let alone not validate them properly).
-	 */
-
-	resolver, err := goresolver.NewResolver("/etc/resolv.conf")
-	b.CheckErr(err)
-
-	_, dnssecErr := resolver.StrictNSQuery(fqdn, dns.TypeA)
-
-	/* Print */
-
-	as := printCnameChain(s, b, fqdn, answers, dnssecErr)
-
-	// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
-	fmt.Printf(
-		"\tDNS Server: %s, authoritative? %s\n",
-		s.Addr(server),
-		s.YesInfo(in.Authoritative),
-	)
-
-	return as, fqdn
+	return preferredAddrs, preferredFqdn // in the case we didn't get any addrs, preferredFqdn will be the original query `name`
 }
 
-func printCnameChain(s output.TtyStyler, b output.Bios, question string, answers []dns.RR, dnssecErr error) []net.IP {
+// While it's at it, filters out all the CNAME records, returning only A and AAAAs
+func buildCnameChain(records []dns.RR) (map[string]string, []net.IP) {
 
 	/* Algo notes
 	 * - CNAMEs can only point to one thing, thus there can only be one "chain" with no branching along the way
@@ -196,11 +228,9 @@ func printCnameChain(s output.TtyStyler, b output.Bios, question string, answers
 	 * - TTL on all returned records will be the same, as they all come in one Answer. Even if you query part-way down the chain to get the end of the chain into the cache, querying further back in the chain will re-assert the later records into the cache, setting their TTLs to be the same as the new ones.
 	 */
 
-	/* Index */
-
 	cnames := map[string]string{}
 	var as []net.IP
-	for _, ans := range answers {
+	for _, ans := range records {
 		switch t := ans.(type) {
 		case *dns.CNAME:
 			cnames[t.Hdr.Name] = t.Target
@@ -211,7 +241,10 @@ func printCnameChain(s output.TtyStyler, b output.Bios, question string, answers
 		}
 	}
 
-	/* Print */
+	return cnames, as
+}
+
+func printCnameChain(s output.TtyStyler, b output.Bios, question string, cnames map[string]string, addrs []net.IP) {
 
 	fmt.Printf("%s ->", s.Addr(question))
 	cname := question
@@ -224,14 +257,7 @@ func printCnameChain(s output.TtyStyler, b output.Bios, question string, answers
 		}
 	}
 
-	fmt.Printf(" %s", s.List(output.Slice2Strings(as), s.AddrStyle))
-
-	fmt.Printf(" (dnssec? %s, ttl remaining %s)\n",
-		s.YesError(dnssecErr),
-		time.Duration(answers[0].Header().Ttl)*time.Second,
-	)
-
-	return as
+	fmt.Printf(" %s", s.List(output.Slice2Strings(addrs), s.AddrStyle))
 }
 
 func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip net.IP) []string {
@@ -244,55 +270,78 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip ne
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	b.CheckErr(err)
 
+	// Note that when you "turn the wifi off", at least on macos, resolv.conf is rewritten with no servers, so this loop just doesn't run
+	if len(dnsConfig.Servers) == 0 {
+		b.PrintWarn("No DNS servers configured. No internet?")
+	}
+
 	c := dns.Client{
 		Dialer: &net.Dialer{Timeout: timeout},
 	}
 
-	var server string
-	var in *dns.Msg
-	var answers []dns.RR
-serversLoop:
+	var preferredNames []string
+
 	for _, serverHost := range dnsConfig.Servers {
-		server = net.JoinHostPort(serverHost, dnsConfig.Port)
+		server := net.JoinHostPort(serverHost, dnsConfig.Port)
 		b.TraceWithName("dns", "Trying server", "addr", server)
+
+		fmt.Printf("Server %s\n", s.Addr(server))
+
+		var queryAnswers []dns.RR
 
 		m := new(dns.Msg)
 		// By default this sets the flag to ask whatever server is configured to recurse for us. We could manually recurse, either continually against the system server (thus using its cache), or from the root servers down. However both are a huge amount of work for no gain
 		m.SetQuestion(revIP, dns.TypePTR)
 
-		in, _, err = c.Exchange(m, server)
+		in, _, err := c.Exchange(m, server)
 		if err != nil {
-			continue serversLoop
+			b.PrintWarn("Error: " + err.Error())
+		} else {
+			queryAnswers = append(queryAnswers, in.Answer...)
 		}
 
-		answers = append(answers, in.Answer...)
+		if len(queryAnswers) > 0 {
+			queryNames := buildPtrEnds(queryAnswers, revIP)
 
-		if len(answers) > 0 {
-			break serversLoop
+			/* Validate DNSSEC */
+
+			resolver, err := goresolver.NewResolver("/etc/resolv.conf")
+			b.CheckErr(err)
+
+			_, dnssecErr := resolver.StrictNSQuery(in.Question[0].Name, dns.TypePTR)
+
+			/* Print */
+
+			fmt.Printf(
+				"\t%s -> %s",
+				s.Addr(ip.String()),
+				s.List(queryNames, s.AddrStyle),
+			)
+			fmt.Printf(
+				" (authoritative? %s, ttl remaining %s, dnssec? %s)\n",
+				s.YesInfo(in.Authoritative),
+				time.Duration(in.Answer[0].Header().Ttl)*time.Second,
+				s.YesError(dnssecErr),
+			)
+
+			/* Latch */
+
+			if len(preferredNames) == 0 {
+				preferredNames = queryNames
+			}
+		} else {
+			fmt.Printf("\t%s: NXDOMAIN\n", s.Addr(ip.String()))
 		}
-
-		//assert(len(in.Answer) == 0)
-		b.PrintInfo(fmt.Sprintf("%s: NXDOMAIN", s.Addr(ip.String()))) // Info-level cause reverse DNS is never set up properly
-		return []string{}
-	}
-	if err != nil {
-		b.PrintWarn("All DNS servers failed.")
-		return []string{}
 	}
 
-	/* Validate DNSSEC */
+	return preferredNames
+}
 
-	resolver, err := goresolver.NewResolver("/etc/resolv.conf")
-	b.CheckErr(err)
+func buildPtrEnds(answers []dns.RR, query string) (ends []string) {
 
-	_, dnssecErr := resolver.StrictNSQuery(in.Question[0].Name, dns.TypePTR)
-
-	/* Print */
-
-	var ends []string
 	for _, ans := range answers {
 		if ptr, ok := ans.(*dns.PTR); ok {
-			if ptr.Hdr.Name != revIP {
+			if ptr.Hdr.Name != query {
 				// Because chains are (I think) permitted, we theoretically have a tree structure. Make sure it's flat for now
 				panic(errors.New("PTR chain"))
 			}
@@ -303,22 +352,7 @@ serversLoop:
 		}
 	}
 
-	fmt.Printf(
-		"%s -> %s (dnssec? %s, ttl remaining %s)\n",
-		s.Addr(ip.String()),
-		s.List(ends, s.AddrStyle),
-		s.YesError(dnssecErr),
-		time.Duration(in.Answer[0].Header().Ttl)*time.Second,
-	)
-
-	// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
-	fmt.Printf(
-		"\tDNS Server: %s, authoritative? %s\n",
-		s.Addr(server),
-		s.YesInfo(in.Authoritative),
-	)
-
-	return ends
+	return
 }
 
 func checkDNSConsistent(s output.TtyStyler, b output.Bios, orig string, revs []string) {
@@ -327,7 +361,7 @@ func checkDNSConsistent(s output.TtyStyler, b output.Bios, orig string, revs []s
 			return
 		}
 	}
-	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s\n", s.Addr(orig), s.List(revs, s.AddrStyle)))
+	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s", s.Addr(orig), s.List(revs, s.AddrStyle)))
 }
 func checkRevDNSConsistent(s output.TtyStyler, b output.Bios, orig net.IP, revs []net.IP) {
 	for _, rev := range revs {
@@ -335,5 +369,5 @@ func checkRevDNSConsistent(s output.TtyStyler, b output.Bios, orig net.IP, revs 
 			return
 		}
 	}
-	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s\n", s.Addr(orig.String()), s.List(output.Slice2Strings(revs), s.AddrStyle)))
+	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s", s.Addr(orig.String()), s.List(output.Slice2Strings(revs), s.AddrStyle)))
 }

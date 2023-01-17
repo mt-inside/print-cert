@@ -80,10 +80,11 @@ func Probe(
 		request, cancel := buildHttpRequest(s, b, requestData, rtData, responseData)
 		defer cancel()
 
-		dnsSystem(s, b, requestData, rtData, responseData)
+		// Do manual DNS first, so that it can give an idea of /why/ the resolution failed, as dnsSystem() quits the programme
 		if manualDns { // Performance optimisation
 			dnsManual(s, b, requestData, rtData, responseData)
 		}
+		dnsSystem(s, b, requestData, rtData, responseData)
 
 		httpRoundTrip(s, b, responseData, client, request, readBody)
 		body = responseData.BodyBytes
