@@ -105,7 +105,7 @@ func Probe(
 
 		/* Redirect */
 
-		if responseData.HttpStatusCode >= 300 && responseData.HttpStatusCode < 400 {
+		if requestData.FollowRedirects && responseData.HttpStatusCode >= 300 && responseData.HttpStatusCode < 400 {
 			// We're basically re-implementing this, which is horrible to have to do: https://cs.opensource.google/go/go/+/refs/tags/go1.19.4:src/net/http/client.go;l=585
 			// We don't have a choice though, because there's no other way to get hold of the HTTP response and body.
 			// - CheckRedirect returning nil means the client follows redirects and eventually returns only the last metadata and body
@@ -174,7 +174,9 @@ func httpRoundTrip(
 	defer resp.Body.Close()
 
 	// The TLS handshake can fail "late", eg because we send a client cert that the server won't authenticate. This happens after all the TLS callbacks have been called, so there's nothing on our side to receive an error. The definitive "ok" signal seems to be this field of ConnectionState (which is low during all the TLS callbacks, cause by definition the handshake isn't done in any of them). Note that the handshake can fail but all our ResponseData can be gathered and valid (if it fails late in the process), so we just print incomplete-handshake as a warning and carefully look at ResponseData fields to see if they're worth printing.
-	responseData.TlsComplete = resp.TLS.HandshakeComplete
+	if resp.TLS != nil { // might be in plaintext mode
+		responseData.TlsComplete = resp.TLS.HandshakeComplete
+	}
 
 	b.TraceWithName("http", "Metadata round trip done", "headers", len(resp.Header))
 	responseData.HttpHeadersTime = time.Now()
