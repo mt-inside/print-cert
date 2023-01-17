@@ -95,10 +95,6 @@ func buildTlsClient(
 					// No "tls code" is handed an error; http::Client.Do is given one, so we have to infer things from what's called
 					// Eg it's possible for this to be called and have every field be valid, but still not complete handshake
 					// Or it's possible for even the first callback to never even be called
-					responseData.TlsComplete = true // There's cs.HandshakeComplete, but it remains false in this function - presumably it's set for later consumers, upon successful return of this function
-					// FIXME: this ^^ is really wrong, like we can get this callback, then have an aborted handshake by a server that rejects our client cert.
-					// - cs isn't a pointer, so we can't stash it from here to later inspect its HandshakeComplete
-					// - think the best bet is: TLS errors always result in the HTTP call failing. Can we grab CS there from the resp? (even if it returns error)? Use that cs.handshakeComplete to be real value
 
 					responseData.TlsAgreedVersion = cs.Version
 					responseData.TlsAgreedCipherSuite = cs.CipherSuite

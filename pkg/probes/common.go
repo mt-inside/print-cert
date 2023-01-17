@@ -173,6 +173,9 @@ func httpRoundTrip(
 
 	defer resp.Body.Close()
 
+	// The TLS handshake can fail "late", eg because we send a client cert that the server won't authenticate. This happens after all the TLS callbacks have been called, so there's nothing on our side to receive an error. The definitive "ok" signal seems to be this field of ConnectionState (which is low during all the TLS callbacks, cause by definition the handshake isn't done in any of them). Note that the handshake can fail but all our ResponseData can be gathered and valid (if it fails late in the process), so we just print incomplete-handshake as a warning and carefully look at ResponseData fields to see if they're worth printing.
+	responseData.TlsComplete = resp.TLS.HandshakeComplete
+
 	b.TraceWithName("http", "Metadata round trip done", "headers", len(resp.Header))
 	responseData.HttpHeadersTime = time.Now()
 	responseData.HttpProto = resp.Proto
