@@ -115,7 +115,7 @@ func (pD *ResponseData) Print(
 ) {
 	// TODO: make work for aborted responses. Mostly about how we call it
 	// - work out how to test an abort in each section (and document, and script if possible)
-	//   - [ ] no internet at all (ie no routes, no local IP to initiate connections)
+	//   - [x] no internet at all (ie no routes, no local IP to initiate connections)
 	//   - [ ] internet up but no packets flow (eg all sections are conn timeout)
 	//   - [ ] DNS: dns server that is port closed / returns garbage
 	//   - [x] TCP: port closed
@@ -126,9 +126,9 @@ func (pD *ResponseData) Print(
 
 	if pO.Dns || pO.DnsFull {
 		b.Banner("DNS")
-		fmt.Print(s.Info("Using the Go stdlib lookup functions (rather than manual queries). Which, in this build, are calling...\n").String())
+		fmt.Print(s.Info("Using the Go stdlib lookup functions (rather than manual queries). Which, in this build, are calling...\n"))
 		fmt.Printf("Resovler: %s.\n", s.Noun(requestData.DnsSystemResolver))
-		fmt.Printf("TCP addresses: %s\n", s.List(pD.DnsSystemResolves, s.AddrStyle))
+		fmt.Printf("TCP addresses: %s\n", s.List(pD.DnsSystemResolves, output.AddrStyle))
 	}
 
 	if pO.Tcp || pO.TcpFull {
@@ -170,7 +170,7 @@ func (pD *ResponseData) Print(
 		// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
 		// If caCert is nil ServingCertChainVerified() will use system roots to verify
 		// The name given is verified against the cert.
-		s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, pO.TlsFull)
+		fmt.Print(s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, pO.TlsFull))
 
 		/* Client cert auth */
 
@@ -182,7 +182,7 @@ func (pD *ResponseData) Print(
 				//need a deamonData with these thigns in (reused)
 				fmt.Println("Presenting client cert chain")
 				if pO.TlsFull {
-					s.ClientCertChain(codec.ChainFromCertificate(requestData.TlsClientPair))
+					fmt.Print(s.ClientCertChain(codec.ChainFromCertificate(requestData.TlsClientPair)))
 				}
 			}
 			fmt.Println()
@@ -203,7 +203,7 @@ func (pD *ResponseData) Print(
 			s.Addr(pD.TlsServerName),
 		)
 		fmt.Printf("\tSymmetric cypher suite %s\n", s.Noun(tls.CipherSuiteName(pD.TlsAgreedCipherSuite)))
-		fmt.Printf("\tALPN proto %s\n", s.OptionalString(pD.TlsAgreedALPN, s.NounStyle))
+		fmt.Printf("\tALPN proto %s\n", s.Noun(pD.TlsAgreedALPN))
 		fmt.Printf("\tOCSP info stapled to response? %s\n", s.YesNo(pD.TlsOCSPStapled))
 		fmt.Printf("\tHSTS? %s\n", s.YesNo(pD.HttpHeaders.Get("Strict-Transport-Security") != ""))
 		if pD.HttpHeaders.Get("Public-Key-Pins") != "" || pD.HttpHeaders.Get("Public-Key-Pins-Report-Only") != "" {
@@ -211,7 +211,6 @@ func (pD *ResponseData) Print(
 			fmt.Printf("\tHPKP? %s\n", s.Ok("yes (Not currently parsed or validated)"))
 		}
 		fmt.Println()
-
 	}
 
 	if pO.Http || pO.HttpFull {
@@ -222,9 +221,7 @@ func (pD *ResponseData) Print(
 			fmt.Printf("Request: Host %s %s %s\n", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
 			if requestData.AuthBearerToken != "" {
 				if token, err := codec.ParseJWTNoSignature(requestData.AuthBearerToken); err == nil {
-					fmt.Printf("\tPresented bearer token: ")
-					s.JWTSummary(token)
-					fmt.Println()
+					fmt.Printf("\tPresented bearer token: %s\n", s.JWTSummary(token))
 				} else {
 					panic(err)
 				}
@@ -240,7 +237,7 @@ func (pD *ResponseData) Print(
 		} else {
 			fmt.Printf(" %s", s.Fail(pD.HttpStatusMessage))
 		}
-		fmt.Printf(" from %s", s.OptionalString(pD.HttpHeaders.Get("server"), s.NounStyle))
+		fmt.Printf(" from %s", s.Noun(pD.HttpHeaders.Get("server")))
 		fmt.Println()
 
 		if !pO.HttpFull {

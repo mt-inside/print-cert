@@ -257,7 +257,7 @@ func printCnameChain(s output.TtyStyler, b output.Bios, question string, cnames 
 		}
 	}
 
-	fmt.Printf(" %s", s.List(output.Slice2Strings(addrs), s.AddrStyle))
+	fmt.Printf(" %s", s.List(output.Slice2Strings(addrs), output.AddrStyle))
 }
 
 func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip net.IP) []string {
@@ -315,7 +315,7 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip ne
 			fmt.Printf(
 				"\t%s -> %s",
 				s.Addr(ip.String()),
-				s.List(queryNames, s.AddrStyle),
+				s.List(queryNames, output.AddrStyle),
 			)
 			fmt.Printf(
 				" (authoritative? %s, ttl remaining %s, dnssec? %s)\n",
@@ -361,7 +361,7 @@ func checkDNSConsistent(s output.TtyStyler, b output.Bios, orig string, revs []s
 			return
 		}
 	}
-	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s", s.Addr(orig), s.List(revs, s.AddrStyle)))
+	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s", s.Addr(orig), s.List(revs, output.AddrStyle)))
 }
 func checkRevDNSConsistent(s output.TtyStyler, b output.Bios, orig net.IP, revs []net.IP) {
 	for _, rev := range revs {
@@ -369,5 +369,5 @@ func checkRevDNSConsistent(s output.TtyStyler, b output.Bios, orig net.IP, revs 
 			return
 		}
 	}
-	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s", s.Addr(orig.String()), s.List(output.Slice2Strings(revs), s.AddrStyle)))
+	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s", s.Addr(orig.String()), s.List(output.Slice2Strings(revs), output.AddrStyle)))
 }
