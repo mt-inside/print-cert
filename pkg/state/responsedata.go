@@ -3,7 +3,6 @@ package state
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -113,6 +112,9 @@ func (pD *ResponseData) Print(
 	rtData *RoundTripData,
 	pO PrintOpts,
 ) {
+	// TODO: check all summaries and fulls with the new indentingBuilder. All features on, and internet DNS so -D prints something meaningful
+	var op output.IndentingBuilder
+
 	// TODO: make work for aborted responses. Mostly about how we call it
 	// - work out how to test an abort in each section (and document, and script if possible)
 	//   - [x] no internet at all (ie no routes, no local IP to initiate connections)
@@ -125,18 +127,18 @@ func (pD *ResponseData) Print(
 	// - probably: a "completed" bool for each section (either print its values, or "not available due to abort")
 
 	if pO.Dns || pO.DnsFull {
-		b.Banner("DNS")
-		fmt.Print(s.Info("Using the Go stdlib lookup functions (rather than manual queries). Which, in this build, are calling...\n"))
-		fmt.Printf("Resovler: %s.\n", s.Noun(requestData.DnsSystemResolver))
-		fmt.Printf("TCP addresses: %s\n", s.List(pD.DnsSystemResolves, output.AddrStyle))
+		op.Block(s.Banner("DNS"))
+		op.Line(s.Info("Using the Go stdlib lookup functions (rather than manual queries). Which, in this build, are calling..."))
+		op.Linef("Resovler: %s.", s.Noun(requestData.DnsSystemResolver))
+		op.Linef("TCP addresses: %s", s.List(pD.DnsSystemResolves, output.AddrStyle))
 	}
 
 	if pO.Tcp || pO.TcpFull {
-		b.Banner("TCP")
+		op.Block(s.Banner("TCP"))
 		b.CheckErr(pD.TransportError)
 
-		fmt.Printf(
-			"%sConnected %s -> %s\n",
+		op.Linef(
+			"%sConnected %s -> %s",
 			s.Timestamp(pD.TransportConnTime, pO.Timestamps, &pD.StartTime),
 			s.Addr(pD.TransportLocalAddr.String()),
 			s.Addr(pD.TransportRemoteAddr.String()),
@@ -144,48 +146,56 @@ func (pD *ResponseData) Print(
 	}
 
 	if rtData.TlsEnabled && (pO.Tls || pO.TlsFull) {
-		b.Banner("TLS")
+		op.Block(s.Banner("TLS"))
 
 		if !pD.TlsComplete {
-			b.PrintWarn("TLS handshake did not complete. It can fail at any point, so all, some, or none of the following might be incomplete")
+			op.Line(s.RenderWarn("TLS handshake did not complete. It can fail at any point, so all, some, or none of the following might be incomplete"))
+			op.NewLine()
 		}
 
 		if pO.Requests {
-			fmt.Printf("Request: ")
+			op.Line("Request: ")
 			if rtData.TlsServerName != "" {
-				fmt.Printf("SNI ServerName %s\n", s.Addr(rtData.TlsServerName))
+				op.Linef("SNI ServerName %s", s.Addr(rtData.TlsServerName))
 			} else {
 				// If an explicit --sni is given which is invalid, we'll already have error'd out
-				b.PrintWarn("Not sending SNI ServerName. Either provide one explicity with --sni, or give a --host or target that's a valid SNI.")
+				op.Line(s.RenderWarn("Not sending SNI ServerName. Either provide one explicity with --sni, or give a --host or target that's a valid SNI."))
 			}
-			fmt.Println()
+			op.NewLine()
 		}
 
 		/* Serving cert chain */
 
-		fmt.Printf("%sServing cert chain\n", s.Timestamp(pD.TlsServerCertsTime, pO.Timestamps, &pD.StartTime))
+		op.Linef("%sServing cert chain", s.Timestamp(pD.TlsServerCertsTime, pO.Timestamps, &pD.StartTime))
+		op.Indent()
 
 		// This verification would normally happen automatically, and we'd be given these chains as args to VerifyPeerCertificate()
 		// However a failed validation would cause client.Do() to return early with that error, and we want to carry on
 		// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
 		// If caCert is nil ServingCertChainVerified() will use system roots to verify
 		// The name given is verified against the cert.
-		fmt.Print(s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, pO.TlsFull))
+		op.Block(s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, pO.TlsFull))
+
+		op.Dedent()
 
 		/* Client cert auth */
 
 		if pD.TlsClientCertRequest {
-			fmt.Print(s.Timestamp(pD.TlsClientCertRequestTime, pO.Timestamps, &pD.StartTime))
+			op.Tabs()
+			// TODO: with the timestamp versions, move this into the two branches
+			op.Print(s.Timestamp(pD.TlsClientCertRequestTime, pO.Timestamps, &pD.StartTime))
 			if requestData.TlsClientPair == nil {
-				b.PrintWarn("Server asked for a client cert but none configured (-c/-k). Not presenting a cert, this might cause the server to abort the handshake.")
+				op.Println(s.RenderWarn("Server asked for a client cert but none configured (-c/-k). Not presenting a cert, this might cause the server to abort the handshake."))
 			} else {
 				//need a deamonData with these thigns in (reused)
-				fmt.Println("Presenting client cert chain")
+				op.Println("Presenting client cert chain")
 				if pO.TlsFull {
-					fmt.Print(s.ClientCertChain(codec.ChainFromCertificate(requestData.TlsClientPair)))
+					op.Indent()
+					op.Block(s.ClientCertChain(codec.ChainFromCertificate(requestData.TlsClientPair)))
+					op.Dedent()
 				}
 			}
-			fmt.Println()
+			op.NewLine()
 		}
 
 		/* TLS agreement summary */
@@ -198,71 +208,79 @@ func (pD *ResponseData) Print(
 		// - [ ] DNS CAA records: should investigate and print in the TLS section
 		// - [ ] DANE
 		// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
-		fmt.Printf("%s handshake complete with %s\n",
+		op.Linef("%s handshake complete with %s",
 			s.Noun(output.TLSVersionName(pD.TlsAgreedVersion)),
 			s.Addr(pD.TlsServerName),
 		)
-		fmt.Printf("\tSymmetric cypher suite %s\n", s.Noun(tls.CipherSuiteName(pD.TlsAgreedCipherSuite)))
-		fmt.Printf("\tALPN proto %s\n", s.Noun(pD.TlsAgreedALPN))
-		fmt.Printf("\tOCSP info stapled to response? %s\n", s.YesNo(pD.TlsOCSPStapled))
-		fmt.Printf("\tHSTS? %s\n", s.YesNo(pD.HttpHeaders.Get("Strict-Transport-Security") != ""))
+		op.Indent()
+		op.Linef("Symmetric cypher suite %s", s.Noun(tls.CipherSuiteName(pD.TlsAgreedCipherSuite)))
+		op.Linef("ALPN proto %s", s.Noun(pD.TlsAgreedALPN))
+		op.Linef("OCSP info stapled to response? %s", s.YesNo(pD.TlsOCSPStapled))
+		op.Linef("HSTS? %s", s.YesNo(pD.HttpHeaders.Get("Strict-Transport-Security") != ""))
 		if pD.HttpHeaders.Get("Public-Key-Pins") != "" || pD.HttpHeaders.Get("Public-Key-Pins-Report-Only") != "" {
 			// Don't print an angry red "no" if not present, because it's obsolete
-			fmt.Printf("\tHPKP? %s\n", s.Ok("yes (Not currently parsed or validated)"))
+			op.Linef("HPKP? %s", s.Ok("yes (Not currently parsed or validated)"))
 		}
-		fmt.Println()
+		op.Dedent()
 	}
 
 	if pO.Http || pO.HttpFull {
-		b.Banner("HTTP")
+		op.Block(s.Banner("HTTP"))
 		b.CheckErr(pD.HttpError)
 
 		if pO.Requests {
-			fmt.Printf("Request: Host %s %s %s\n", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
+			op.Linef("Request: Host %s %s %s", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
+			op.Indent()
 			if requestData.AuthBearerToken != "" {
 				if token, err := codec.ParseJWTNoSignature(requestData.AuthBearerToken); err == nil {
-					fmt.Printf("\tPresented bearer token: %s\n", s.JWTSummary(token))
+					op.Linef("Presented bearer token: %s", s.JWTSummary(token))
 				} else {
 					panic(err)
 				}
 			}
-			fmt.Println()
+			op.NewLine()
+			op.Dedent()
 		}
 
-		fmt.Printf("%s%s", s.Timestamp(pD.HttpHeadersTime, pO.Timestamps, &pD.StartTime), s.Noun(pD.HttpProto))
+		op.Tabs()
+		op.Printf("%s%s", s.Timestamp(pD.HttpHeadersTime, pO.Timestamps, &pD.StartTime), s.Noun(pD.HttpProto))
 		if pD.HttpStatusCode < 400 {
-			fmt.Printf(" %s", s.Ok(pD.HttpStatusMessage))
+			op.Printf(" %s", s.Ok(pD.HttpStatusMessage))
 		} else if pD.HttpStatusCode < 500 {
-			fmt.Printf(" %s", s.Warn(pD.HttpStatusMessage))
+			op.Printf(" %s", s.Warn(pD.HttpStatusMessage))
 		} else {
-			fmt.Printf(" %s", s.Fail(pD.HttpStatusMessage))
+			op.Printf(" %s", s.Fail(pD.HttpStatusMessage))
 		}
-		fmt.Printf(" from %s", s.Noun(pD.HttpHeaders.Get("server")))
-		fmt.Println()
+		op.Printf(" from %s", s.Noun(pD.HttpHeaders.Get("server")))
+		op.NewLine()
 
+		op.Indent()
 		if !pO.HttpFull {
-			fmt.Printf("\tclaimed %s bytes of %s\n", s.Bright(strconv.FormatInt(int64(pD.HttpContentLength), 10)), s.Noun(pD.HttpHeaders.Get("content-type")))
+			op.Linef("claimed %s bytes of %s", s.Bright(strconv.FormatInt(int64(pD.HttpContentLength), 10)), s.Noun(pD.HttpHeaders.Get("content-type")))
 			if pD.HttpCompressed {
-				fmt.Printf("\tcontent was transparently decompressed; length information will not be accurate\n")
+				op.Linef("content was transparently decompressed; length information will not be accurate")
 			}
 		} else {
 			for k, vs := range pD.HttpHeaders {
-				fmt.Printf("\t%s = %v\n", s.Addr(k), s.Noun(strings.Join(vs, ",")))
+				op.Linef("%s: %v", s.Addr(k), s.Noun(strings.Join(vs, ",")))
 			}
 		}
+		op.Dedent()
 	}
 
 	if pO.Body || pO.BodyFull {
-		b.Banner("Body")
+		op.Block(s.Banner("Body"))
 		b.CheckErr(pD.BodyError)
 
 		bodyLen := len(pD.BodyBytes)
-		fmt.Printf("%s%s bytes of body actually read\n",
+		op.Linef("%s%s bytes of body actually read",
 			s.Timestamp(pD.BodyCompleteTime, pO.Timestamps, &pD.StartTime),
 			s.Bright(strconv.FormatInt(int64(bodyLen), 10)),
 		)
-		fmt.Printf("Valid utf-8? %s\n", s.YesNo(utf8.Valid(pD.BodyBytes)))
-		fmt.Println()
+		op.Indent()
+		op.Linef("Valid utf-8? %s", s.YesNo(utf8.Valid(pD.BodyBytes)))
+		op.Dedent()
+		op.NewLine()
 
 		printLen := usvc.MinInt(bodyLen, 72)
 		if pO.BodyFull {
@@ -270,23 +288,27 @@ func (pD *ResponseData) Print(
 		}
 
 		// TODO should share a print-body with all the other places that do this, which should check it's UTF, print that status, deal with elision, etc
-		fmt.Printf("%v", string(pD.BodyBytes[0:printLen])) // assumes utf8
+		op.Printf("%v", string(pD.BodyBytes[0:printLen])) // assumes utf8
 		if bodyLen > printLen {
-			fmt.Printf("<%d bytes elided>", bodyLen-printLen)
+			op.Printf("<%d bytes elided>", bodyLen-printLen)
 		}
 		if bodyLen > 0 {
-			fmt.Println()
+			op.NewLine()
 		}
 	}
 
 	if pD.RedirectTarget != nil {
-		b.Banner("Redirect")
+		op.Block(s.Banner("Redirect"))
 
-		fmt.Printf("Redirected to %s\n", s.Addr(pD.RedirectTarget.String()))
+		op.Linef("Redirected to %s", s.Addr(pD.RedirectTarget.String()))
+		op.Indent()
 		if requestData.FollowRedirects {
-			fmt.Println("\tfollowing...")
+			op.Line("following...")
 		} else {
-			fmt.Println("\tNot following redirects, enable with --location")
+			op.Line("Not following redirects, enable with --location")
 		}
+		op.Dedent()
 	}
+
+	op.Output()
 }

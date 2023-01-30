@@ -57,12 +57,14 @@ func dnsManual(
 	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
 ) {
+	var op output.IndentingBuilder
+
 	// TODO: Ideally we'd save all this info in responseData and then print in Print(), but it's a lot of effort and this always runs in a separate phase
 	// - this is probably needed, cause DANE etc should print with tls(?)
-	b.Banner("DNS - extra manual resolution")
-	s.Info("This section is for information only; its results are not used to determine connection address.")
-	s.Info("These are hand-cranked DNS queries. DNS is hard; the results may be plain wrong.")
-	s.Info("This is DNS-only, ie no attempt to even query files, let alone any other nsswitch stuff.")
+	op.Block(s.Banner("DNS - extra manual resolution"))
+	op.Line(s.Info("This section is for information only; its results are not used to determine connection address."))
+	op.Line(s.Info("These are hand-cranked DNS queries. DNS is hard; the results may be plain wrong."))
+	op.Line(s.Info("This is DNS-only, ie no attempt to even query files, let alone any other nsswitch stuff."))
 
 	// TODO: add geoip / ASN lookup (a la envbin)
 
@@ -72,7 +74,7 @@ func dnsManual(
 		// It's an IP: do reverse lookup
 		names := queryRevDNS(s, b, requestData.Timeout, ip)
 		if len(names) > 0 {
-			fmt.Println("Checking forward zone and consistency for preferred answer")
+			op.Line("Checking forward zone and consistency for preferred answer")
 		}
 		for _, name := range names {
 			ips, _ := queryDNS(s, b, requestData.Timeout, name)
@@ -84,7 +86,7 @@ func dnsManual(
 		// It's not an IP; assume it's a name: do forwards lookup
 		ips, fqdn := queryDNS(s, b, requestData.Timeout, host)
 		if len(ips) > 0 {
-			fmt.Println("Checking reverse zone and consistency for preferred answer")
+			op.Line("Checking reverse zone and consistency for preferred answer")
 		}
 		for _, ip := range ips {
 			revNames := queryRevDNS(s, b, requestData.Timeout, ip)
@@ -103,6 +105,7 @@ func dnsManual(
 * - add 108.162.193.144 (theo.ns.cloudflare.com) as a system dns server then try barnard.empty.org.uk, is cool
  */
 func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query string) ([]net.IP, string) {
+	var op output.IndentingBuilder
 
 	b.TraceWithName("dns", "Doing forwards resolution", "name", query)
 
@@ -111,7 +114,7 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query st
 
 	// Note that when you "turn the wifi off", at least on macos, resolv.conf is rewritten with no servers, so this loop just doesn't run
 	if len(dnsConfig.Servers) == 0 {
-		b.PrintWarn("No DNS servers configured. No internet?")
+		op.Line(s.RenderWarn("No DNS servers configured. No internet?"))
 	}
 
 	c := dns.Client{
@@ -128,7 +131,8 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query st
 		serverHit := false
 		b.TraceWithName("dns", "Trying server", "addr", server)
 
-		fmt.Printf("Server %s\n", s.Addr(server))
+		op.Linef("Server %s", s.Addr(server))
+		op.Indent()
 
 		for _, name := range queries {
 			var queryAnswers []dns.RR
@@ -145,7 +149,7 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query st
 
 			in, _, err := c.Exchange(m, server)
 			if err != nil {
-				b.PrintWarn("Error: " + err.Error())
+				op.Line(s.RenderWarn("Error: " + err.Error()))
 				// It's UDP; just continue in the face of errors
 			} else {
 				queryAnswers = append(queryAnswers, in.Answer...)
@@ -158,7 +162,7 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query st
 
 			in, _, err = c.Exchange(m, server)
 			if err != nil {
-				b.PrintWarn("Error: " + err.Error())
+				op.Line(s.RenderWarn("Error: " + err.Error()))
 			} else {
 				queryAnswers = append(queryAnswers, in.Answer...)
 			}
@@ -191,14 +195,15 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query st
 
 				/* Print */
 
-				fmt.Printf("\t") // TODO: styler should only return strings. All printing should be done by bios.Print, which takes strings (from styler, sprintf, etc), and applies the current tab level. Add b.Indent(), Dedent()
-				printCnameChain(s, b, name, queryCnames, queryAddrs)
+				op.Tabs()
+				op.Print(renderCnameChain(s, b, name, queryCnames, queryAddrs))
 				// Authoritative means that the server you're talking to *hosts* that zone - honestly unlikely as you're probably talking to a local stub resolver, or a caching resolver on a home router / ISP.
-				fmt.Printf(" (authoritative? %s, ttl remaining %s, dnssec? %s)\n",
+				op.Printf(" (authoritative? %s, ttl remaining %s, dnssec? %s)",
 					s.YesInfo(in.Authoritative),                             // Authority is per zone, so using this last result is fine, as we loop per search domain
 					time.Duration(queryAnswers[0].Header().Ttl)*time.Second, // Each record could theoretically have different TTLs, but they're usually set zone-wide
 					s.YesError(dnssecErr),
 				)
+				op.NewLine()
 
 				/* Latch */
 
@@ -210,9 +215,13 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query st
 			}
 		}
 		if !serverHit {
-			fmt.Printf("\t%s: NXDOMAIN\n", s.Addr(query))
+			op.Linef("%s: NXDOMAIN", s.Addr(query))
 		}
+
+		op.Dedent()
 	}
+
+	op.Output()
 
 	return preferredAddrs, preferredFqdn // in the case we didn't get any addrs, preferredFqdn will be the original query `name`
 }
@@ -244,23 +253,27 @@ func buildCnameChain(records []dns.RR) (map[string]string, []net.IP) {
 	return cnames, as
 }
 
-func printCnameChain(s output.TtyStyler, b output.Bios, question string, cnames map[string]string, addrs []net.IP) {
+func renderCnameChain(s output.TtyStyler, b output.Bios, question string, cnames map[string]string, addrs []net.IP) string {
+	op := ""
 
-	fmt.Printf("%s ->", s.Addr(question))
+	op += fmt.Sprintf("%s ->", s.Addr(question))
 	cname := question
 	for {
 		if target, found := cnames[cname]; found {
-			fmt.Printf(" %s ->", s.Addr(target))
+			op += fmt.Sprintf(" %s ->", s.Addr(target))
 			cname = target
 		} else {
 			break
 		}
 	}
 
-	fmt.Printf(" %s", s.List(output.Slice2Strings(addrs), output.AddrStyle))
+	op += fmt.Sprintf(" %s", s.List(output.Slice2Strings(addrs), output.AddrStyle))
+
+	return op
 }
 
 func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip net.IP) []string {
+	var op output.IndentingBuilder
 
 	revIP, err := dns.ReverseAddr(ip.String())
 	b.CheckErr(err)
@@ -272,7 +285,7 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip ne
 
 	// Note that when you "turn the wifi off", at least on macos, resolv.conf is rewritten with no servers, so this loop just doesn't run
 	if len(dnsConfig.Servers) == 0 {
-		b.PrintWarn("No DNS servers configured. No internet?")
+		op.Line(s.RenderWarn("No DNS servers configured. No internet?"))
 	}
 
 	c := dns.Client{
@@ -285,7 +298,8 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip ne
 		server := net.JoinHostPort(serverHost, dnsConfig.Port)
 		b.TraceWithName("dns", "Trying server", "addr", server)
 
-		fmt.Printf("Server %s\n", s.Addr(server))
+		op.Linef("Server %s", s.Addr(server))
+		op.Indent()
 
 		var queryAnswers []dns.RR
 
@@ -312,17 +326,19 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip ne
 
 			/* Print */
 
-			fmt.Printf(
-				"\t%s -> %s",
+			op.Tabs()
+			op.Printf(
+				"%s -> %s",
 				s.Addr(ip.String()),
 				s.List(queryNames, output.AddrStyle),
 			)
-			fmt.Printf(
-				" (authoritative? %s, ttl remaining %s, dnssec? %s)\n",
+			op.Printf(
+				" (authoritative? %s, ttl remaining %s, dnssec? %s)",
 				s.YesInfo(in.Authoritative),
 				time.Duration(in.Answer[0].Header().Ttl)*time.Second,
 				s.YesError(dnssecErr),
 			)
+			op.NewLine()
 
 			/* Latch */
 
@@ -330,8 +346,10 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip ne
 				preferredNames = queryNames
 			}
 		} else {
-			fmt.Printf("\t%s: NXDOMAIN\n", s.Addr(ip.String()))
+			op.Linef("%s: NXDOMAIN", s.Addr(ip.String()))
 		}
+
+		op.Dedent()
 	}
 
 	return preferredNames
