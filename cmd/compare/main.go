@@ -107,7 +107,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	diffs := differ.DiffMain(string(refBody), string(newBody), true)
 
 	if len(diffs) == 1 && diffs[0].Type == dmp.DiffEqual {
-		b.PrintInfo("response bodies equal")
+		b.PrintOk("response bodies equal")
 	} else {
 		b.PrintWarn("response bodies differ")
 		fmt.Println(differ.DiffPrettyText(diffs))
