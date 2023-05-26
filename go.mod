@@ -1,6 +1,6 @@
 module github.com/mt-inside/print-cert
 
-go 1.19
+go 1.20
 
 //replace github.com/mt-inside/http-log => ../http-log
 
