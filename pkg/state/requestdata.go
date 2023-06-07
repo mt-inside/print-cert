@@ -28,6 +28,7 @@ type RequestData struct {
 
 	HttpMethod  string
 	HttpForce11 bool
+	HttpForce3  bool // Necessarily forces QUIC too. h2 can also run over QUIC, but that's not supported by the library we use, so the two are coupled
 
 	AuthKrb         bool
 	AuthBearerToken string
@@ -40,6 +41,7 @@ func RequestDataFromViper(s output.TtyStyler, b output.Bios, dnsResolverName str
 		DnsSystemResolver: dnsResolverName,
 		HttpMethod:        "GET",
 		HttpForce11:       viper.GetBool("http-11"),
+		HttpForce3:        viper.GetBool("http-3"),
 		AuthKrb:           viper.GetBool("kerberos"),
 	}
 

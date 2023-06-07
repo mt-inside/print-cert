@@ -3,6 +3,7 @@ package state
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/quic-go/quic-go/logging"
 	"github.com/spf13/viper"
 
 	"github.com/mt-inside/go-usvc"
@@ -71,6 +73,7 @@ type ResponseData struct {
 	TransportConnTime   time.Time
 	TransportRemoteAddr net.Addr
 	TransportLocalAddr  net.Addr
+	TransportVersion    logging.VersionNumber // Protocol version, iff QUIC
 
 	TlsClientCertRequest     bool
 	TlsClientCertRequestTime time.Time
@@ -135,14 +138,19 @@ func (pD *ResponseData) Print(
 	}
 
 	if !skipping && (pO.Tcp || pO.TcpFull) {
-		op.Block(s.Banner("TCP"))
+		op.Block(s.Banner("TRANSPORT"))
 		skipping = b.CheckPrintErr(pD.TransportError)
 
+		op.Printf("%s", s.Timestamp(pD.TransportConnTime, pO.Timestamps, &pD.StartTime))
+		if pD.TransportVersion != 0 { // NB: h2 can run over quic too, so don't check HTTP version here
+			op.Print(s.Noun(fmt.Sprintf("QUIC %s", pD.TransportVersion)))
+		} else {
+			op.Print(s.Noun("TCP"))
+		}
 		op.Linef(
-			"%sConnected %s -> %s",
-			s.Timestamp(pD.TransportConnTime, pO.Timestamps, &pD.StartTime),
-			s.Addr(pD.TransportLocalAddr.String()),
-			s.Addr(pD.TransportRemoteAddr.String()),
+			" connected %s -> %s",
+			s.Addr(pD.TransportLocalAddr),
+			s.Addr(pD.TransportRemoteAddr),
 		)
 	}
 
