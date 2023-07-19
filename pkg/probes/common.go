@@ -144,7 +144,7 @@ func buildHttpRequest(
 	}
 
 	req, err := http.NewRequestWithContext(ctx, requestData.HttpMethod, l7Addr.String(), nil)
-	b.CheckErr(err)
+	b.Unwrap(err)
 
 	req.Host = rtData.HttpHost
 	if requestData.AuthBearerToken != "" {
@@ -168,6 +168,7 @@ func httpRoundTrip(
 ) {
 	resp, err := client.Do(req)
 	if err != nil {
+		// NB: can't really differentiate actual HTTP errors from TLS ones here, as tls error types are returned, but they're private, wrapped in url.Error. But we have our ResponseData::TlsComplete flag that we use
 		responseData.HttpError = err
 		return
 	}

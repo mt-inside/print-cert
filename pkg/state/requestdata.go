@@ -47,22 +47,22 @@ func RequestDataFromViper(s output.TtyStyler, b output.Bios, dnsResolverName str
 
 	if viper.Get("cert") != "" || viper.Get("key") != "" {
 		pair, err := tls.LoadX509KeyPair(viper.GetString("cert"), viper.GetString("key"))
-		b.CheckErr(err)
+		b.Unwrap(err)
 		requestData.TlsClientPair = &pair
 	}
 
 	if viper.Get("ca") != "" {
 		bytes, err := os.ReadFile(viper.GetString("ca"))
-		b.CheckErr(err)
+		b.Unwrap(err)
 		requestData.TlsServingCA, err = codec.ParseCertificate(bytes)
-		b.CheckErr(err)
+		b.Unwrap(err)
 	}
 
 	/* Load other request files */
 
 	if viper.Get("bearer") != "" {
 		bytes, err := os.ReadFile(viper.GetString("bearer"))
-		b.CheckErr(err)
+		b.Unwrap(err)
 		requestData.AuthBearerToken = strings.TrimSpace(string(bytes))
 	}
 
@@ -98,7 +98,7 @@ func DeriveRoundTripData(s output.TtyStyler, b output.Bios, target, host, sni, p
 	}
 
 	pathParts, err := url.Parse(path)
-	b.CheckErr(err)
+	b.Unwrap(err)
 	rtd.HttpPath = pathParts
 
 	rtd.TlsEnabled = tls
