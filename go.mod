@@ -4,13 +4,15 @@ go 1.20
 
 //replace github.com/mt-inside/http-log => ../http-log
 
+//replace github.com/mt-inside/go-usvc => ../go-usvc
+
 require (
 	github.com/MarshallWace/go-spnego v0.1.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/logrusorgru/aurora/v3 v3.0.0
 	github.com/miekg/dns v1.1.55
 	github.com/mt-inside/go-usvc v0.0.7
-	github.com/mt-inside/http-log v0.0.0-20230608114814-76935cfb9dc5
+	github.com/mt-inside/http-log v0.7.12
 	github.com/peterzen/goresolver v1.0.2
 	github.com/sergi/go-diff v1.3.1
 	github.com/spf13/cobra v1.7.0
