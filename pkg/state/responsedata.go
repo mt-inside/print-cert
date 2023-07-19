@@ -139,7 +139,10 @@ func (pD *ResponseData) Print(
 
 	if !skipping && (pO.Tcp || pO.TcpFull) {
 		op.Block(s.Banner("TRANSPORT"))
-		skipping = b.CheckPrintErr(pD.TransportError)
+		if pD.TransportError != nil {
+			skipping = true
+			op.Line(s.RenderErr(pD.TransportError.Error()))
+		}
 
 		op.Printf("%s", s.Timestamp(pD.TransportConnTime, pO.Timestamps, &pD.StartTime))
 		if pD.TransportVersion != 0 { // NB: h2 can run over quic too, so don't check HTTP version here
@@ -236,7 +239,10 @@ func (pD *ResponseData) Print(
 
 	if !skipping && (pO.Http || pO.HttpFull) {
 		op.Block(s.Banner("HTTP"))
-		skipping = b.CheckPrintErr(pD.HttpError)
+		if pD.HttpError != nil {
+			skipping = true
+			op.Line(s.RenderErr(pD.HttpError.Error()))
+		}
 
 		if pO.Requests {
 			op.Linef("Request: Host %s %s %s", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
@@ -280,7 +286,10 @@ func (pD *ResponseData) Print(
 
 	if !skipping && (pO.Body || pO.BodyFull) {
 		op.Block(s.Banner("Body"))
-		skipping = b.CheckPrintErr(pD.BodyError)
+		if pD.BodyError != nil {
+			skipping = true
+			op.Line(s.RenderErr(pD.BodyError.Error()))
+		}
 
 		bodyLen := len(pD.BodyBytes)
 		op.Linef("%s%s bytes of body actually read",
