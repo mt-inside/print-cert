@@ -114,6 +114,7 @@ func (pD *ResponseData) Print(
 ) {
 	// TODO: check all summaries and fulls with the new indentingBuilder. All features on, and internet DNS so -D prints something meaningful
 	var op output.IndentingBuilder
+	var skipping bool
 
 	// TODO: make work for aborted responses. Mostly about how we call it
 	// - work out how to test an abort in each section (and document, and script if possible)
@@ -133,9 +134,9 @@ func (pD *ResponseData) Print(
 		op.Linef("TCP addresses: %s", s.List(pD.DnsSystemResolves, output.AddrStyle))
 	}
 
-	if pO.Tcp || pO.TcpFull {
+	if !skipping && (pO.Tcp || pO.TcpFull) {
 		op.Block(s.Banner("TCP"))
-		b.CheckErr(pD.TransportError)
+		skipping = b.CheckPrintErr(pD.TransportError)
 
 		op.Linef(
 			"%sConnected %s -> %s",
@@ -145,8 +146,9 @@ func (pD *ResponseData) Print(
 		)
 	}
 
-	if rtData.TlsEnabled && (pO.Tls || pO.TlsFull) {
+	if !skipping && (rtData.TlsEnabled && (pO.Tls || pO.TlsFull)) {
 		op.Block(s.Banner("TLS"))
+		skipping = !pD.TlsComplete // can't really get tls Errors (they're private and wrapped), but can infer from this
 
 		if !pD.TlsComplete {
 			op.Line(s.RenderWarn("TLS handshake did not complete. It can fail at any point, so all, some, or none of the following might be incomplete"))
@@ -224,9 +226,9 @@ func (pD *ResponseData) Print(
 		op.Dedent()
 	}
 
-	if pO.Http || pO.HttpFull {
+	if !skipping && (pO.Http || pO.HttpFull) {
 		op.Block(s.Banner("HTTP"))
-		b.CheckErr(pD.HttpError)
+		skipping = b.CheckPrintErr(pD.HttpError)
 
 		if pO.Requests {
 			op.Linef("Request: Host %s %s %s", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
@@ -268,9 +270,9 @@ func (pD *ResponseData) Print(
 		op.Dedent()
 	}
 
-	if pO.Body || pO.BodyFull {
+	if !skipping && (pO.Body || pO.BodyFull) {
 		op.Block(s.Banner("Body"))
-		b.CheckErr(pD.BodyError)
+		skipping = b.CheckPrintErr(pD.BodyError)
 
 		bodyLen := len(pD.BodyBytes)
 		op.Linef("%s%s bytes of body actually read",
@@ -297,7 +299,7 @@ func (pD *ResponseData) Print(
 		}
 	}
 
-	if pD.RedirectTarget != nil {
+	if !skipping && (pD.RedirectTarget != nil) {
 		op.Block(s.Banner("Redirect"))
 
 		op.Linef("Redirected to %s", s.Addr(pD.RedirectTarget.String()))

@@ -59,6 +59,7 @@ func buildTlsClient(
 					b.TraceWithName("tls", "Asked for a client certificate")
 
 					if requestData.TlsClientPair == nil {
+						// No error but an empty Certificate.Certificate means we won't send a client cert. If this is unacceptable to the server, it'll abort the handshake.
 						return &tls.Certificate{}, nil
 					}
 
@@ -104,6 +105,7 @@ func buildTlsClient(
 
 					responseData.TlsServerCerts = cs.PeerCertificates
 					if rtData.TlsServerName != "" && cs.ServerName != rtData.TlsServerName {
+						// TODO: to responseData - acutally, check & print this in responseData::Print
 						b.PrintErr("TLS handshake's ServerName " + cs.ServerName + " does not equal requested " + rtData.TlsServerName)
 					}
 					responseData.TlsServerName = cs.ServerName

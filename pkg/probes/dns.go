@@ -31,12 +31,12 @@ func dnsSystem(
 	ip := net.ParseIP(host)
 	if ip != nil {
 		names, err := net.LookupAddr(ip.String())
-		b.CheckErr(err)
+		b.CheckPrintErr(err) // TODO: should save the errors rather than print here, and print at op time
 		responseData.DnsSystemResolves = names
 		b.TraceWithName("dns", "Provided target %s is already an IP.", ip)
 	} else {
 		ips, err := net.LookupIP(host)
-		b.CheckErr(err)
+		b.CheckPrintErr(err)
 		responseData.DnsSystemResolves = utils.MapToString(ips)
 		ip = ips[0]
 		b.TraceWithName("dns", "Connection will use first-returned system-resolved IP", "IP", ip)
@@ -110,7 +110,7 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query st
 	b.TraceWithName("dns", "Doing forwards resolution", "name", query)
 
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
-	b.CheckErr(err)
+	b.Unwrap(err)
 
 	// Note that when you "turn the wifi off", at least on macos, resolv.conf is rewritten with no servers, so this loop just doesn't run
 	if len(dnsConfig.Servers) == 0 {
@@ -189,7 +189,7 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query st
 				// Hack: redirect go's log package to null for the duration of these calls, cause this library logs.
 				usvc.DisableGoLog()
 				resolver, err := goresolver.NewResolver("/etc/resolv.conf")
-				b.CheckErr(err)
+				b.Unwrap(err)
 				_, dnssecErr := resolver.StrictNSQuery(name, dns.TypeA)
 				usvc.InterceptGoLog(b.GetLogger())
 
@@ -276,12 +276,12 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip ne
 	var op output.IndentingBuilder
 
 	revIP, err := dns.ReverseAddr(ip.String())
-	b.CheckErr(err)
+	b.CheckPrintErr(err)
 
 	b.TraceWithName("dns", "Resolving in reverse-zone", "address", revIP)
 
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
-	b.CheckErr(err)
+	b.CheckPrintErr(err)
 
 	// Note that when you "turn the wifi off", at least on macos, resolv.conf is rewritten with no servers, so this loop just doesn't run
 	if len(dnsConfig.Servers) == 0 {
@@ -320,7 +320,7 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip ne
 			/* Validate DNSSEC */
 
 			resolver, err := goresolver.NewResolver("/etc/resolv.conf")
-			b.CheckErr(err)
+			b.CheckPrintErr(err)
 
 			_, dnssecErr := resolver.StrictNSQuery(in.Question[0].Name, dns.TypePTR)
 

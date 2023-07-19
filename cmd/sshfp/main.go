@@ -43,10 +43,10 @@ func main() {
 	b := output.NewTtyBios(s, 10)
 
 	resolver, err := goresolver.NewResolver("/etc/resolv.conf")
-	b.CheckErr(err)
+	b.Unwrap(err)
 
 	results, err := resolver.StrictNSQuery(dns.CanonicalName(os.Args[1]), dns.TypeSSHFP)
-	b.CheckErr(err)
+	b.Unwrap(err)
 
 	fmt.Println("DNSSEC ok")
 

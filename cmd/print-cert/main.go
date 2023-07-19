@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -116,6 +117,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	tcpTarget := args[0]
 	if !utils.ServerNameConformant(viper.GetString("sni")) {
 		b.PrintErr("SNI ServerName cannot be an IP or contain a port number. Ignoring supplied value.")
+		os.Exit(1)
 	}
 
 	if viper.GetBool("no-tls") && (viper.GetBool("tls") || viper.GetBool("tls-full")) {
@@ -126,6 +128,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	timestamps := viper.GetString("timestamps")
 	if timestamps != "none" && timestamps != "abs" && timestamps != "rel" {
 		b.PrintErr("--timestamps value invalid")
+		os.Exit(1)
 	}
 
 	requestData := state.RequestDataFromViper(s, b, probes.DnsResolverName)
