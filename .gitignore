@@ -1,1 +1,6 @@
 *_string.go
+.env
+/packages
+*.rsa*
+sbom-*
+print-cert.tar
