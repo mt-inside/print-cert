@@ -123,7 +123,7 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	if viper.GetBool("no-tls") && (viper.GetBool("tls") || viper.GetBool("tls-full")) {
 		// TODO: get this by default with no-tls, cause tls is default on. Do like http-log does (?) and default all off in viper, then set a default set iff they're all off
-		b.PrintWarn("tls printing options have no effect when TLS is disabled")
+		b.PrintWarn("TLS printing options have no effect when TLS is disabled")
 	}
 
 	// Shame pflag can't do this for us.
