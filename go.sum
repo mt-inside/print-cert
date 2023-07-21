@@ -185,8 +185,8 @@ github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyua
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/mt-inside/go-usvc v0.0.7 h1:fRkg084Yg2laZ3c8ny1FgTrGZS38VLWEdKIIiXykzHo=
 github.com/mt-inside/go-usvc v0.0.7/go.mod h1:TuNBFFihKEkU9VYgI0zBvd0uZ+xYvQynSUp/qlSl+NU=
-github.com/mt-inside/http-log v0.7.12 h1:xVK3dwnE6p2Hi04vKnwCm+TMWNXOYWkFGYiMz8v0bdM=
-github.com/mt-inside/http-log v0.7.12/go.mod h1:txWjQhLW8NbvAm1dTvvEP/DTQ/mz69h1ZCa7K7IUifU=
+github.com/mt-inside/http-log v0.7.13 h1:OqXS+jF4FUUqy5oaAbBeNdoThtdrmQJDlfcHWvBBywg=
+github.com/mt-inside/http-log v0.7.13/go.mod h1:txWjQhLW8NbvAm1dTvvEP/DTQ/mz69h1ZCa7K7IUifU=
 github.com/onsi/ginkgo/v2 v2.9.5 h1:+6Hr4uxzP4XIUyAkg61dWBw8lb/gc4/X5luuxN/EC+Q=
 github.com/onsi/ginkgo/v2 v2.9.5/go.mod h1:tvAoo1QUJwNEU2ITftXTpR7R1RbCzoZUOs3RonqW57k=
 github.com/onsi/gomega v1.27.6 h1:ENqfyGeS5AX/rlXDd/ETokDz93u0YufY1Pgxuy/PvWE=
