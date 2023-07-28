@@ -4,7 +4,6 @@ package:
   version: 0.2.0
   description: Prints network certificates
   url: https://github.com/mt-inside/print-cert
-  target-architecture: [all] # bails on a lot of them which aren't supported yet
   copyright:
     - paths: ["*"]
       license: Apache-2.0
