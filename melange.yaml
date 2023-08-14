@@ -1,13 +1,13 @@
 package:
   name: print-cert
-  # TODO: take as arg or something
-  version: 0.2.0
+  epoch: 0
+  version: 0.2.0-9-gaca8bd2-dirty
   description: Prints network certificates
   url: https://github.com/mt-inside/print-cert
   copyright:
-    - paths: ["*"]
+    - paths:
+        - "*"
       license: Apache-2.0
-
 environment:
   contents:
     keyring:
@@ -18,11 +18,10 @@ environment:
       - wolfi-base
       - build-base
       - go
-
 pipeline:
   - name: Build
     runs: |
       # build, rather than install, to be able to control output dir
       # We use CGO, so that we get libc's sophisticated name resolution etc. This is basically pointless because we're in a container which won't have NIS/LDAP/etc set up, but maybe someone wants to mount that config in?
       # Since we use CGO, force gcc's ld, and tell it to statically link libc in, for ease of packaging in a container
-      go build -o "${{targets.destdir}}/usr/bin/print-cert" -a -ldflags "-w -linkmode external -extldflags '-static' -X 'github.com/mt-inside/print-cert/pkg/build.Version="${{package.version}}"'" ./cmd/print-cert
+      go build -o "${{targets.destdir}}/usr/bin/print-cert" -a -ldflags "-w -linkmode external -extldflags '-static' -X 'github.com/mt-inside/print-cert/internal/build.Version="${{package.version}}"'" ./cmd/print-cert

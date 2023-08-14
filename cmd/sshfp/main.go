@@ -11,6 +11,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/peterzen/goresolver"
 
+	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
@@ -40,7 +41,7 @@ const (
 
 func main() {
 	s := output.NewTtyStyler(aurora.NewAurora(true))
-	b := output.NewTtyBios(s, 10)
+	b := bios.NewTtyBios(s)
 
 	resolver, err := goresolver.NewResolver("/etc/resolv.conf")
 	b.Unwrap(err)

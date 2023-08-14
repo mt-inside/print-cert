@@ -12,13 +12,14 @@ import (
 	"github.com/mt-inside/go-usvc"
 	"github.com/mt-inside/print-cert/pkg/state"
 
+	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
 
 func dnsSystem(
 	s output.TtyStyler,
-	b output.Bios,
+	b bios.Bios,
 	requestData *state.RequestData,
 	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
@@ -33,13 +34,13 @@ func dnsSystem(
 		names, err := net.LookupAddr(ip.String())
 		b.CheckPrintErr(err) // TODO: should save the errors rather than print here, and print at op time
 		responseData.DnsSystemResolves = names
-		b.TraceWithName("dns", "Provided target %s is already an IP.", ip)
+		log.Info("Provided target %s is already an IP.", ip)
 	} else {
 		ips, err := net.LookupIP(host)
 		b.CheckPrintErr(err)
 		responseData.DnsSystemResolves = utils.MapToString(ips)
 		ip = ips[0]
-		b.TraceWithName("dns", "Connection will use first-returned system-resolved IP", "IP", ip)
+		log.Info("Connection will use first-returned system-resolved IP", "IP", ip)
 	}
 }
 
@@ -52,7 +53,7 @@ func dnsSystem(
  */
 func dnsManual(
 	s output.TtyStyler,
-	b output.Bios,
+	b bios.Bios,
 	requestData *state.RequestData,
 	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
@@ -104,10 +105,10 @@ func dnsManual(
 * - google.com has ipv6 & v4
 * - add 108.162.193.144 (theo.ns.cloudflare.com) as a system dns server then try barnard.empty.org.uk, is cool
  */
-func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query string) ([]net.IP, string) {
+func queryDNS(s output.TtyStyler, b bios.Bios, timeout time.Duration, query string) ([]net.IP, string) {
 	var op output.IndentingBuilder
 
-	b.TraceWithName("dns", "Doing forwards resolution", "name", query)
+	log.Info("Doing forwards resolution", "name", query)
 
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	b.Unwrap(err)
@@ -129,7 +130,7 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query st
 	for _, serverHost := range dnsConfig.Servers {
 		server := net.JoinHostPort(serverHost, dnsConfig.Port)
 		serverHit := false
-		b.TraceWithName("dns", "Trying server", "addr", server)
+		log.Info("Trying server", "addr", server)
 
 		op.Linef("Server %s", s.Addr(server))
 		op.Indent()
@@ -139,7 +140,7 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query st
 			var queryCnames map[string]string
 			var queryAddrs []net.IP
 
-			b.TraceWithName("dns", "Trying search path item", "fqdn", name)
+			log.Info("Trying search path item", "fqdn", name)
 
 			/* v4 */
 
@@ -191,7 +192,7 @@ func queryDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, query st
 				resolver, err := goresolver.NewResolver("/etc/resolv.conf")
 				b.Unwrap(err)
 				_, dnssecErr := resolver.StrictNSQuery(name, dns.TypeA)
-				usvc.InterceptGoLog(b.GetLogger())
+				// usvc.InterceptGoLog(b.GetLogger()) TODO: reimpl this with tet/telemetry log
 
 				/* Print */
 
@@ -253,7 +254,7 @@ func buildCnameChain(records []dns.RR) (map[string]string, []net.IP) {
 	return cnames, as
 }
 
-func renderCnameChain(s output.TtyStyler, b output.Bios, question string, cnames map[string]string, addrs []net.IP) string {
+func renderCnameChain(s output.TtyStyler, b bios.Bios, question string, cnames map[string]string, addrs []net.IP) string {
 	op := ""
 
 	op += fmt.Sprintf("%s ->", s.Addr(question))
@@ -267,18 +268,18 @@ func renderCnameChain(s output.TtyStyler, b output.Bios, question string, cnames
 		}
 	}
 
-	op += fmt.Sprintf(" %s", s.List(output.Slice2Strings(addrs), output.AddrStyle))
+	op += fmt.Sprintf(" %s", s.List(utils.MapToString(addrs), output.AddrStyle))
 
 	return op
 }
 
-func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip net.IP) []string {
+func queryRevDNS(s output.TtyStyler, b bios.Bios, timeout time.Duration, ip net.IP) []string {
 	var op output.IndentingBuilder
 
 	revIP, err := dns.ReverseAddr(ip.String())
 	b.CheckPrintErr(err)
 
-	b.TraceWithName("dns", "Resolving in reverse-zone", "address", revIP)
+	log.Info("Resolving in reverse-zone", "address", revIP)
 
 	dnsConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	b.CheckPrintErr(err)
@@ -296,7 +297,7 @@ func queryRevDNS(s output.TtyStyler, b output.Bios, timeout time.Duration, ip ne
 
 	for _, serverHost := range dnsConfig.Servers {
 		server := net.JoinHostPort(serverHost, dnsConfig.Port)
-		b.TraceWithName("dns", "Trying server", "addr", server)
+		log.Info("Trying server", "addr", server)
 
 		op.Linef("Server %s", s.Addr(server))
 		op.Indent()
@@ -373,7 +374,7 @@ func buildPtrEnds(answers []dns.RR, query string) (ends []string) {
 	return
 }
 
-func checkDNSConsistent(s output.TtyStyler, b output.Bios, orig string, revs []string) {
+func checkDNSConsistent(s output.TtyStyler, b bios.Bios, orig string, revs []string) {
 	for _, rev := range revs {
 		if rev == orig {
 			return
@@ -381,11 +382,11 @@ func checkDNSConsistent(s output.TtyStyler, b output.Bios, orig string, revs []s
 	}
 	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s", s.Addr(orig), s.List(revs, output.AddrStyle)))
 }
-func checkRevDNSConsistent(s output.TtyStyler, b output.Bios, orig net.IP, revs []net.IP) {
+func checkRevDNSConsistent(s output.TtyStyler, b bios.Bios, orig net.IP, revs []net.IP) {
 	for _, rev := range revs {
 		if rev.Equal(orig) {
 			return
 		}
 	}
-	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s", s.Addr(orig.String()), s.List(output.Slice2Strings(revs), output.AddrStyle)))
+	b.PrintWarn(fmt.Sprintf("dns inconsistency: %s not in %s", s.Addr(orig.String()), s.List(utils.MapToString(revs), output.AddrStyle)))
 }

@@ -11,12 +11,15 @@ import (
 	dmp "github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tetratelabs/log"
+	"github.com/tetratelabs/telemetry"
+	"github.com/tetratelabs/telemetry/scope"
 
 	"github.com/mt-inside/print-cert/pkg/probes"
 	"github.com/mt-inside/print-cert/pkg/state"
 
+	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/output"
-	hlu "github.com/mt-inside/http-log/pkg/utils"
 )
 
 func main() {
@@ -67,8 +70,12 @@ func main() {
 
 func appMain(cmd *cobra.Command, args []string) {
 
+	log := log.NewFlattened()
+	scope.UseLogger(log)
+	scope.SetAllScopes(telemetry.LevelDebug)
+
 	s := output.NewTtyStyler(aurora.NewAurora(true))
-	b := output.NewTtyBios(s, hlu.Ternary(viper.GetBool("trace"), 10, 0))
+	b := bios.NewTtyBios(s)
 
 	/* Reference server */
 	refTarget := args[0]

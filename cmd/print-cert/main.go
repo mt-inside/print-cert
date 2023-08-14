@@ -10,12 +10,16 @@ import (
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tetratelabs/log"
+	"github.com/tetratelabs/telemetry"
+	"github.com/tetratelabs/telemetry/scope"
 
+	"github.com/mt-inside/print-cert/internal/build"
 	"github.com/mt-inside/print-cert/pkg/probes"
 	"github.com/mt-inside/print-cert/pkg/state"
 	"github.com/mt-inside/print-cert/pkg/utils"
 
-	hlu "github.com/mt-inside/http-log/pkg/utils"
+	"github.com/mt-inside/http-log/pkg/bios"
 
 	"github.com/mt-inside/http-log/pkg/output"
 )
@@ -32,13 +36,13 @@ func init() {
 func main() {
 
 	cmd := &cobra.Command{
-		Use:   "print-cert target[:port]", // TODO: from binary name constant. Yes, should contain argv[0] (this is parsed out and used as Cobra's idea of what we're called)
-		Short: "TODO short",               // Not ever shown for a binary? Only to summarise this Command in one line if it were a sub-command?
+		Use:   build.Name + " target[:port]", // Yes, should contain argv[0] (this is parsed out and used as Cobra's idea of what we're called)
+		Short: "TODO short",                  // Not ever shown for a binary? Only to summarise this Command in one line if it were a sub-command?
 		Long:  "Note: all summaries are enabled by default. Disable with --foo=false",
-		Example: "print-cert localhost:8080 --trace --timestamps rel -d=false -B\n" + // TODO: from binary name constant
-			"https://office.com/setup => print-cert -L office.com --path /setup\n" +
-			"http://neverssl.com => print-cert --no-tls neverssl.com",
-		Version: "TODO from build",
+		Example: build.Name + " localhost:8080 --trace --timestamps rel -d=false -B\n" +
+			"https://office.com/setup => " + build.Name + " -L office.com --path /setup\n" +
+			"http://neverssl.com => " + build.Name + " --no-tls neverssl.com",
+		Version: build.Version,
 		Args:    cobra.ExactArgs(1),
 		// We don't use the RunE version of this, because we bail early (os.Exit) if we hit any errors. Ideally we'd bubble them all up to here and return them, but if we do that, Cobra prints Usage, which is totally not what you want if there's been like a connection failure. There's a Command::SilenceErrors flag, but it also stops the usage being printed on an arg parse error
 		Run: appMain,
@@ -110,10 +114,14 @@ func appMain(cmd *cobra.Command, args []string) {
 	//   - print-cert probably also wants a logger version too, so it can be automated easily
 	// - all of this uses styler / bios (and are allowed to print themselves, esp the strings that styler returns)
 
+	log := log.NewFlattened()
+	scope.UseLogger(log)
+	scope.SetAllScopes(telemetry.LevelDebug)
+
 	// TODO: styler and bios to a TUI package
 	// - styler should only return strings (use stringbuffer)
 	s := output.NewTtyStyler(aurora.NewAurora(true))
-	b := output.NewTtyBios(s, hlu.Ternary(viper.GetBool("trace"), 10, 0))
+	b := bios.NewTtyBios(s)
 
 	tcpTarget := args[0]
 	if !utils.ServerNameConformant(viper.GetString("sni")) {

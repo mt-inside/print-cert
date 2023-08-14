@@ -9,20 +9,21 @@ import (
 
 	"github.com/mt-inside/print-cert/pkg/state"
 
+	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
 type myTracer struct {
 	s  output.TtyStyler
-	b  output.Bios
+	b  bios.Bios
 	pD *state.ResponseData
 }
 
 func (t *myTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
 	t.pD.StartTime = time.Now() // start and connection times are an even worse concept with lazy connections like this
-	t.b.TraceWithName("transport", "Dialing", "net", "udp", "addr", remote)
+	log.Info("Dialing", "net", "udp", "addr", remote)
 	t.pD.TransportConnTime = time.Now()
-	t.b.TraceWithName("transport", "Connected", "to", remote, "from", local)
+	log.Info("Connected", "to", remote, "from", local)
 
 	t.pD.TransportLocalAddr = local
 	t.pD.TransportRemoteAddr = remote

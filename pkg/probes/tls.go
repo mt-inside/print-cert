@@ -14,12 +14,13 @@ import (
 
 	"github.com/mt-inside/print-cert/pkg/state"
 
+	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
 func buildTlsClient(
 	s output.TtyStyler,
-	b output.Bios,
+	b bios.Bios,
 	requestData *state.RequestData,
 	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
@@ -52,7 +53,7 @@ func buildTlsClient(
 		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			responseData.TlsClientCertRequestTime = time.Now()
 			responseData.TlsClientCertRequest = true
-			b.TraceWithName("tls", "Asked for a client certificate")
+			log.Info("Asked for a client certificate")
 
 			if requestData.TlsClientPair == nil {
 				// No error but an empty Certificate.Certificate means we won't send a client cert. If this is unacceptable to the server, it'll abort the handshake.
@@ -70,7 +71,7 @@ func buildTlsClient(
 		// - We're asked to give any other opinions on them
 		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 			responseData.TlsServerCertsTime = time.Now()
-			b.TraceWithName("tls", "Built-in cert verification finished (no-op)")
+			log.Info("Built-in cert verification finished (no-op)")
 
 			// For maximum purity we'd save the presented certs in this callback, but
 			// - a) we'd have to parse them ourselves, and idk how much nuance there is in that, and
@@ -86,7 +87,7 @@ func buildTlsClient(
 		// - One last chance to reject the connection
 		// - I think all cert checking can be done above, so this is about objecting to the negotiated ALPN protocol or cypher suite or whatever
 		VerifyConnection: func(cs tls.ConnectionState) error {
-			b.TraceWithName("tls", "Connection parameter validation")
+			log.Info("Connection parameter validation")
 
 			// In the case of a handshake error, depending on where the server bails, none, some, or all of these callbacks get called
 			// No "tls code" is handed an error; http::Client.Do is given one, so we have to infer things from what's called

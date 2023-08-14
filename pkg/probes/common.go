@@ -10,14 +10,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mt-inside/print-cert/pkg/build"
+	"github.com/mt-inside/print-cert/internal/build"
 	"github.com/mt-inside/print-cert/pkg/state"
 
+	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/output"
 	hlu "github.com/mt-inside/http-log/pkg/utils"
 )
 
-func getDialContext(s output.TtyStyler, b output.Bios, requestData *state.RequestData, responseData *state.ResponseData) func(context.Context, string, string) (net.Conn, error) {
+func getDialContext(s output.TtyStyler, b bios.Bios, requestData *state.RequestData, responseData *state.ResponseData) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, network, address string) (net.Conn, error) {
 		dialer := &net.Dialer{
 			Timeout:   requestData.Timeout,
@@ -25,7 +26,7 @@ func getDialContext(s output.TtyStyler, b output.Bios, requestData *state.Reques
 			// Happens "after creating the network connection but before actually dialing."
 			Control: func(network, address string, rawConn syscall.RawConn) error {
 				responseData.StartTime = time.Now() // we use this time, which is _some time_ before the syn is sent, as start time. We do so because even on a fast machine it's 0.5ms after we call client.Do(), which is a longer delay than the actual TCP handshake over loopback. So while not totally acurate, it's more acurate.
-				b.TraceWithName("transport", "Dialing", "net", network, "addr", address)
+				log.Info("Dialing", "net", network, "addr", address)
 
 				return nil
 			},
@@ -36,7 +37,7 @@ func getDialContext(s output.TtyStyler, b output.Bios, requestData *state.Reques
 			return nil, err
 		}
 
-		b.TraceWithName("transport", "Connected", "to", conn.RemoteAddr(), "from", conn.LocalAddr())
+		log.Info("Connected", "to", conn.RemoteAddr(), "from", conn.LocalAddr())
 		responseData.TransportConnTime = time.Now()
 		responseData.TransportLocalAddr = conn.LocalAddr()
 		responseData.TransportRemoteAddr = conn.RemoteAddr()
@@ -45,7 +46,7 @@ func getDialContext(s output.TtyStyler, b output.Bios, requestData *state.Reques
 	}
 }
 
-func getCheckRedirect(s output.TtyStyler, b output.Bios, requestData *state.RequestData, responseData *state.ResponseData) func(*http.Request, []*http.Request) error {
+func getCheckRedirect(s output.TtyStyler, b bios.Bios, requestData *state.RequestData, responseData *state.ResponseData) func(*http.Request, []*http.Request) error {
 	// NB: when testing this
 	// - Go will only follow redirects when status is 30[1,2,3,7,8] and Location is set (https://cs.opensource.google/go/go/+/refs/tags/go1.19.4:src/net/http/client.go;l=502)
 	// - Even apparently duplicating the request that curl sends, it's really hard to make httpbin give us a 302
@@ -61,7 +62,7 @@ func getCheckRedirect(s output.TtyStyler, b output.Bios, requestData *state.Requ
 
 func Probe(
 	s output.TtyStyler,
-	b output.Bios,
+	b bios.Bios,
 	requestData *state.RequestData,
 	rtData *state.RoundTripData,
 	printOpts state.PrintOpts,
@@ -126,7 +127,7 @@ func Probe(
 
 func buildHttpRequest(
 	s output.TtyStyler,
-	b output.Bios,
+	b bios.Bios,
 	requestData *state.RequestData,
 	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
@@ -160,7 +161,7 @@ func buildHttpRequest(
 
 func httpRoundTrip(
 	s output.TtyStyler,
-	b output.Bios,
+	b bios.Bios,
 	responseData *state.ResponseData,
 	client *http.Client,
 	req *http.Request,
@@ -180,7 +181,7 @@ func httpRoundTrip(
 		responseData.TlsComplete = resp.TLS.HandshakeComplete
 	}
 
-	b.TraceWithName("http", "Metadata round trip done", "headers", len(resp.Header))
+	log.Info("Metadata round trip done", "headers", len(resp.Header))
 	responseData.HttpHeadersTime = time.Now()
 	responseData.HttpProto = resp.Proto
 	responseData.HttpStatusCode = resp.StatusCode
@@ -196,7 +197,7 @@ func httpRoundTrip(
 			return
 		}
 		responseData.BodyCompleteTime = time.Now()
-		b.TraceWithName("http", "Body read complete", "bytes", len(rawBody))
+		log.Info("Body read complete", "bytes", len(rawBody))
 		responseData.BodyBytes = rawBody
 	}
 }

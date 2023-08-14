@@ -12,12 +12,14 @@ require (
 	github.com/logrusorgru/aurora/v3 v3.0.0
 	github.com/miekg/dns v1.1.55
 	github.com/mt-inside/go-usvc v0.0.7
-	github.com/mt-inside/http-log v0.7.13
+	github.com/mt-inside/http-log v0.7.14
 	github.com/peterzen/goresolver v1.0.2
-	github.com/quic-go/quic-go v0.36.2
+	github.com/quic-go/quic-go v0.37.2-0.20230814023601-70f3f44a0975
 	github.com/sergi/go-diff v1.3.1
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.16.0
+	github.com/tetratelabs/log v0.2.3
+	github.com/tetratelabs/telemetry v0.7.5
 )
 
 require (
@@ -26,7 +28,7 @@ require (
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-logr/zapr v1.2.4 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.0.0 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
 	github.com/hashicorp/go-uuid v1.0.2 // indirect
@@ -44,8 +46,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
-	github.com/quic-go/qtls-go1-19 v0.3.2 // indirect
-	github.com/quic-go/qtls-go1-20 v0.2.2 // indirect
+	github.com/quic-go/qtls-go1-20 v0.3.1 // indirect
 	github.com/spf13/afero v1.9.5 // indirect
 	github.com/spf13/cast v1.5.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
