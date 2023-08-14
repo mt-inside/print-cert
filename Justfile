@@ -10,6 +10,7 @@ TAGD := `git describe --tags --always --abbrev --dirty --broken`
 CGR_ARCHS := "aarch64,amd64" # "x86,armv7"
 MELANGE := "melange"
 APKO    := "apko"
+LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/print-cert/internal/build.Version=" + TAGD + "'\""
 
 install-tools:
 	go install golang.org/x/tools/cmd/stringer@latest
@@ -31,33 +32,33 @@ test: lint
 
 build: test
 	# We don't statically link here (although we do use CGO), so the resulting binary isn't quite the same as what ends up in the container, but close
-	go build ./cmd/print-cert
+	go build {{LD_COMMON}} ./cmd/print-cert
 
 build-no-cgo: test
 	# For testing; we expect it to be built *with* CGO in the wild
-	CGO_ENABLED=0 go build ./cmd/print-cert
+	CGO_ENABLED=0 go build {{LD_COMMON}} ./cmd/print-cert
 
 install *ARGS: generate test
-	go install ./cmd/print-cert {{ARGS}}
+	go install {{LD_COMMON}} ./cmd/print-cert {{ARGS}}
 
-melange: test
+package: test
 	{{MELANGE}} bump melange.yaml {{TAGD}}
 	{{MELANGE}} keygen
 	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
 
-package:
+image-local:
 	{{APKO}} build --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}} print-cert.tar
 	docker load < print-cert.tar
-publish:
+image-publish:
 	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
 	{{APKO}} publish --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}}
 
 print-cert *ARGS: test
-	go run ./cmd/print-cert {{ARGS}} localhost:8080
+	go run {{LD_COMMON}} ./cmd/print-cert {{ARGS}} localhost:8080
 
 print-cert-mtls-jwt *ARGS: test
 	# FIXME: hard-coded path
-	go run ./cmd/print-cert -k=ssl/client-key.pem -c=ssl/client-cert.pem -C=ssl/server-ca-cert.pem --bearer /Users/matt/work/personal/talks/istio-demo-master/41/pki/one.jwt -s example.com -T -B {{ARGS}} localhost:8080
+	go run {{LD_COMMON}} ./cmd/print-cert -k=ssl/client-key.pem -c=ssl/client-cert.pem -C=ssl/server-ca-cert.pem --bearer /Users/matt/work/personal/talks/istio-demo-master/41/pki/one.jwt -s example.com -T -B {{ARGS}} localhost:8080
 
 curl-mtls-jwt-body *ARGS: test
 	# FIXME: hard-coded path
@@ -70,7 +71,7 @@ curl-mtls-self-sign-jwt-body *ARGS: test
 
 
 compare *ARGS: test
-	go run ./cmd/compare {{ARGS}} localhost:8080 127.0.0.1:8443
+	go run {{LD_COMMON}} ./cmd/compare {{ARGS}} localhost:8080 127.0.0.1:8443
 
 nginx-build:
 	docker build -t nginx-mutual nginx
