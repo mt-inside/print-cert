@@ -15,8 +15,6 @@ import (
 	"github.com/quic-go/quic-go/logging"
 	"github.com/spf13/viper"
 
-	"github.com/mt-inside/go-usvc"
-
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 )
@@ -222,7 +220,7 @@ func (pD *ResponseData) Print(
 		// - [ ] DANE
 		// CORS headers aren't really meaningful cause they'll only be sent if the request includes an Origin header
 		op.Linef("%s handshake complete with %s",
-			s.Noun(output.TLSVersionName(pD.TlsAgreedVersion)),
+			s.Noun(tls.VersionName(pD.TlsAgreedVersion)),
 			s.Addr(pD.TlsServerName),
 		)
 		op.Indent()
@@ -301,7 +299,7 @@ func (pD *ResponseData) Print(
 		op.Dedent()
 		op.NewLine()
 
-		printLen := usvc.MinInt(bodyLen, 72)
+		printLen := min(bodyLen, 72)
 		if pO.BodyFull {
 			printLen = bodyLen
 		}
