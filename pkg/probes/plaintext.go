@@ -5,12 +5,13 @@ import (
 
 	"github.com/mt-inside/print-cert/pkg/state"
 
+	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
 func buildPlaintextClient(
 	s output.TtyStyler,
-	b output.Bios,
+	b bios.Bios,
 	requestData *state.RequestData,
 	rtData *state.RoundTripData,
 	responseData *state.ResponseData,

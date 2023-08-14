@@ -15,8 +15,10 @@ import (
 	"github.com/quic-go/quic-go/logging"
 	"github.com/spf13/viper"
 
+	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
+	"github.com/mt-inside/http-log/pkg/parser"
 )
 
 type PrintOpts struct {
@@ -108,7 +110,8 @@ func NewResponseData() *ResponseData {
 }
 
 func (pD *ResponseData) Print(
-	s output.TtyStyler, b output.Bios,
+	s output.TtyStyler,
+	b bios.Bios,
 	requestData *RequestData,
 	rtData *RoundTripData,
 	pO PrintOpts,
@@ -246,7 +249,7 @@ func (pD *ResponseData) Print(
 			op.Linef("Request: Host %s %s %s", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
 			op.Indent()
 			if requestData.AuthBearerToken != "" {
-				if token, err := codec.ParseJWTNoSignature(requestData.AuthBearerToken); err == nil {
+				if token, err := parser.JWTNoSignature(requestData.AuthBearerToken); err == nil {
 					op.Linef("Presented bearer token: %s", s.JWTSummary(token))
 				} else {
 					panic(err)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/mt-inside/print-cert/pkg/utils"
 
+	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 )
@@ -34,7 +35,7 @@ type RequestData struct {
 	AuthBearerToken string
 }
 
-func RequestDataFromViper(s output.TtyStyler, b output.Bios, dnsResolverName string) *RequestData {
+func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName string) *RequestData {
 	requestData := &RequestData{
 		Timeout:           viper.GetDuration("timeout"),
 		FollowRedirects:   viper.GetBool("location"),
@@ -84,7 +85,7 @@ type RoundTripData struct {
 	HttpPath *url.URL
 }
 
-func DeriveRoundTripData(s output.TtyStyler, b output.Bios, target, host, sni, path string, tls bool) *RoundTripData {
+func DeriveRoundTripData(s output.TtyStyler, b bios.Bios, target, host, sni, path string, tls bool) *RoundTripData {
 	rtd := &RoundTripData{}
 
 	rtd.TransportTarget = target

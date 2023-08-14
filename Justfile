@@ -40,7 +40,8 @@ build-no-cgo: test
 install *ARGS: generate test
 	go install ./cmd/print-cert {{ARGS}}
 
-melange:
+melange: test
+	{{MELANGE}} bump melange.yaml {{TAGD}}
 	{{MELANGE}} keygen
 	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
 
