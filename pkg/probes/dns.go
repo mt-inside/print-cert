@@ -130,7 +130,7 @@ func queryDNS(s output.TtyStyler, b bios.Bios, timeout time.Duration, query stri
 	for _, serverHost := range dnsConfig.Servers {
 		server := net.JoinHostPort(serverHost, dnsConfig.Port)
 		serverHit := false
-		log.Info("Trying server", "addr", server)
+		log.Debug("Trying server", "addr", server)
 
 		op.Linef("Server %s", s.Addr(server))
 		op.Indent()
@@ -140,7 +140,7 @@ func queryDNS(s output.TtyStyler, b bios.Bios, timeout time.Duration, query stri
 			var queryCnames map[string]string
 			var queryAddrs []net.IP
 
-			log.Info("Trying search path item", "fqdn", name)
+			log.Debug("Trying search path item", "fqdn", name)
 
 			/* v4 */
 
@@ -297,7 +297,7 @@ func queryRevDNS(s output.TtyStyler, b bios.Bios, timeout time.Duration, ip net.
 
 	for _, serverHost := range dnsConfig.Servers {
 		server := net.JoinHostPort(serverHost, dnsConfig.Port)
-		log.Info("Trying server", "addr", server)
+		log.Debug("Trying server", "addr", server)
 
 		op.Linef("Server %s", s.Addr(server))
 		op.Indent()
