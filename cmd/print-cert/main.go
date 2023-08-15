@@ -10,7 +10,6 @@ import (
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/tetratelabs/log"
 	"github.com/tetratelabs/telemetry"
 	"github.com/tetratelabs/telemetry/scope"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/mt-inside/print-cert/pkg/utils"
 
 	"github.com/mt-inside/http-log/pkg/bios"
+	"github.com/mt-inside/http-log/pkg/zaplog"
 
 	"github.com/mt-inside/http-log/pkg/output"
 )
@@ -114,7 +114,7 @@ func appMain(cmd *cobra.Command, args []string) {
 	//   - print-cert probably also wants a logger version too, so it can be automated easily
 	// - all of this uses styler / bios (and are allowed to print themselves, esp the strings that styler returns)
 
-	log := log.NewFlattened()
+	log := zaplog.New()
 	scope.UseLogger(log)
 	scope.SetAllScopes(telemetry.LevelDebug)
 
