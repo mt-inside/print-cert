@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -85,7 +86,7 @@ func main() {
 	// Recall: it's --foo=false for Viper, not --no-foo
 	cmd.Flags().BoolP("requests", "V", true, "Print summary of the requests being sent. Nothing that can't be inferred from the arguments provided, but this option spells it out")
 	cmd.Flags().StringP("timestamps", "", "none", "Print timestamps: none, abs, rel.")
-	cmd.Flags().BoolP("trace", "v", false, "Trace requests/responses as they happen, in addition to printing info at the end")
+	cmd.Flags().StringP("verbosity", "v", "error", "Trace requests/responses as they happen, in addition to printing info at the end")
 
 	/* Command */
 	cmd.Flags().BoolP("location", "L", false, "Follow redirects")
@@ -116,7 +117,19 @@ func appMain(cmd *cobra.Command, args []string) {
 
 	log := zaplog.New()
 	scope.UseLogger(log)
-	scope.SetAllScopes(telemetry.LevelDebug)
+	switch strings.ToLower(viper.GetString("verbosity")) {
+	case "debug":
+		scope.SetAllScopes(telemetry.LevelDebug)
+	case "info":
+		scope.SetAllScopes(telemetry.LevelInfo)
+	case "error":
+		scope.SetAllScopes(telemetry.LevelError)
+	case "none":
+		scope.SetAllScopes(telemetry.LevelNone)
+	default:
+		scope.SetAllScopes(telemetry.LevelError)
+		log.Error("Unknown log level", fmt.Errorf("log level %s invalid", viper.GetString("verbosity")))
+	}
 
 	// TODO: styler and bios to a TUI package
 	// - styler should only return strings (use stringbuffer)
