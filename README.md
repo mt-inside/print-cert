@@ -8,12 +8,12 @@
 
 Run from container image:
 ```bash
-docker run -t --rm ghcr.io/mt-inside/print-cert:v0.2.0 mt165.co.uk
+docker run -t --rm ghcr.io/mt-inside/print-cert:v0.2.2 mt165.co.uk
 ```
 
 Download single, statically-linked binary
 ```bash
-wget -O print-cert https://github.com/mt-inside/print-cert/releases/download/v0.2.0/print-cert-$(uname -s)-$(uname -m)
+wget -O print-cert https://github.com/mt-inside/print-cert/releases/download/v0.2.2/print-cert-$(uname -s)-$(uname -m)
 chmod u+x print-cert
 ./print-cert mt165.co.uk
 ```
