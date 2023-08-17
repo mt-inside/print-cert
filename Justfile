@@ -12,10 +12,12 @@ MELANGE := "melange"
 APKO    := "apko"
 LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/print-cert/internal/build.Version=" + TAGD + "'\""
 
-install-tools:
+tools-install:
 	go install golang.org/x/tools/cmd/stringer@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install honnef.co/go/tools/cmd/staticcheck@latest
+	go install golang.org/x/exp/cmd/...@latest
+	go install github.com/kisielk/godepgraph@latest
 
 generate:
 	go generate ./...
@@ -29,6 +31,12 @@ lint: generate
 
 test: lint
 	go test ./... -race -covermode=atomic -coverprofile=coverage.out
+
+render-mod-graph:
+	go mod graph | modgraphviz | dot -Tpng -o mod_graph.png
+
+render-pkg-graph:
+	godepgraph -s -onlyprefixes github.com/mt-inside ./cmd/http-log | dot -Tpng -o pkg_graph.png
 
 build: test
 	# We don't statically link here (although we do use CGO), so the resulting binary isn't quite the same as what ends up in the container, but close
