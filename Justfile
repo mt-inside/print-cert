@@ -1,23 +1,24 @@
 set dotenv-load
 
 default:
-	@just --list
+	@just --list --unsorted --color=always
 
 DH_USER := "mtinside"
 REPO := "docker.io/" + DH_USER + "/print-cert"
 TAG := `git describe --tags --always --abbrev`
 TAGD := `git describe --tags --always --abbrev --dirty --broken`
 CGR_ARCHS := "aarch64,amd64" # "x86,armv7"
+LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/print-cert/internal/build.Version=" + TAGD + "'\""
 MELANGE := "melange"
 APKO    := "apko"
-LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/print-cert/internal/build.Version=" + TAGD + "'\""
 
 tools-install:
-	go install golang.org/x/tools/cmd/stringer@latest
+	go install golang.org/x/tools/cmd/goimports@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 	go install golang.org/x/exp/cmd/...@latest
 	go install github.com/kisielk/godepgraph@latest
+	go install golang.org/x/tools/cmd/stringer@latest
 
 generate:
 	go generate ./...
@@ -46,10 +47,12 @@ build-no-cgo: test
 	# For testing; we expect it to be built *with* CGO in the wild
 	CGO_ENABLED=0 go build {{LD_COMMON}} ./cmd/print-cert
 
-install *ARGS: generate test
-	go install {{LD_COMMON}} ./cmd/print-cert {{ARGS}}
+install: test
+	go install {{LD_COMMON}} ./cmd/print-cert
 
 package: test
+	# if there's >1 package in this directory, apko seems to pick the _oldest_ without fail
+	rm -rf ./packages/
 	{{MELANGE}} bump melange.yaml {{TAGD}}
 	{{MELANGE}} keygen
 	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
@@ -60,6 +63,30 @@ image-local:
 image-publish:
 	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
 	{{APKO}} publish --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}}
+cosign-sign:
+	# Experimental includes pushing the signature to a Rekor transparency log, default: rekor.sigstore.dev
+	COSIGN_EXPERIMENTAL=1 cosign sign {{REPO}}:{{TAG}}
+
+image-ls:
+	hub-tool tag ls --platforms {{REPO}}
+image-inspect:
+	docker buildx imagetools inspect {{REPO}}:{{TAG}}
+sbom-show:
+	docker sbom {{REPO}}:{{TAG}}
+snyk:
+	snyk test .
+	snyk container test {{REPO}}:{{TAG}}
+cosign-verify:
+	COSIGN_EXPERIMENTAL=1 cosign verify {{REPO}}:{{TAG}} | jq .
+
+clean:
+	rm -f coverage.out
+	rm -f mod_graph.png pkg_graph.png
+	rm -f sbom-*
+	rm -rf packages/
+	rm -f print-cert.tar
+	rm -f print-cert
+	rm -f melange.rsa*
 
 print-cert *ARGS: test
 	go run {{LD_COMMON}} ./cmd/print-cert {{ARGS}} localhost:8080
