@@ -97,12 +97,24 @@ type ResponseData struct {
 	HttpHeaders       http.Header
 	HttpContentLength int64
 	HttpCompressed    bool
+	HttpRatelimit     *HttpRatelimit
 
 	BodyError        error
 	BodyCompleteTime time.Time
 	BodyBytes        []byte
 
 	RedirectTarget *url.URL
+}
+
+type HttpRatelimit struct {
+	Bucket   uint64
+	Remain   uint64
+	Reset    time.Duration
+	Policies []HttpRatelimitPolicy
+}
+type HttpRatelimitPolicy struct {
+	Bucket uint64
+	Window time.Duration
 }
 
 func NewResponseData() *ResponseData {
@@ -272,6 +284,9 @@ func (pD *ResponseData) Print(
 		op.NewLine()
 
 		op.Indent()
+
+		/* HEADERS */
+
 		if !pO.HttpFull {
 			op.Linef("claimed %s bytes of %s", s.Bright(strconv.FormatInt(int64(pD.HttpContentLength), 10)), s.Noun(pD.HttpHeaders.Get("content-type")))
 			if pD.HttpCompressed {
@@ -282,6 +297,18 @@ func (pD *ResponseData) Print(
 				op.Linef("%s: %v", s.Addr(k), s.Noun(strings.Join(vs, ",")))
 			}
 		}
+
+		/* RATELIMIT */
+
+		if pD.HttpRatelimit != nil {
+			op.Tabs()
+			op.Printf("ratelimit: expiring bucket %s/%s resets in %s. Policies", s.Number(pD.HttpRatelimit.Remain), s.Number(pD.HttpRatelimit.Bucket), s.Duration(pD.HttpRatelimit.Reset))
+			for _, policy := range pD.HttpRatelimit.Policies {
+				op.Printf(" %s/%s", s.Number(policy.Bucket), s.Duration(policy.Window))
+			}
+			op.NewLine()
+		}
+
 		op.Dedent()
 	}
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mt-inside/print-cert/internal/build"
+	"github.com/mt-inside/print-cert/pkg/parser"
 	"github.com/mt-inside/print-cert/pkg/state"
 
 	"github.com/mt-inside/http-log/pkg/bios"
@@ -189,6 +190,13 @@ func httpRoundTrip(
 	responseData.HttpHeaders = resp.Header
 	responseData.HttpContentLength = resp.ContentLength
 	responseData.HttpCompressed = resp.Uncompressed
+
+	/* Parsers / Enrichers */
+
+	responseData.HttpRatelimit = parser.Ratelimit(resp.Header)
+	// TODO: should parse more things here. Like hops...
+
+	/* Body */
 
 	if readBody {
 		rawBody, err := io.ReadAll(resp.Body)
