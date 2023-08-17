@@ -24,11 +24,11 @@ func TestParseDraft03(t *testing.T) {
 			Remain: 3,
 			Reset:  11 * time.Second,
 			Policies: []state.HttpRatelimitPolicy{
-				state.HttpRatelimitPolicy{
+				{
 					Bucket: 69,
 					Window: 1 * time.Second,
 				},
-				state.HttpRatelimitPolicy{
+				{
 					Bucket: 101,
 					Window: 1 * time.Hour,
 				},
