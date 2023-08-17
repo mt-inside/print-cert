@@ -9,6 +9,7 @@ TAG := `git describe --tags --always --abbrev`
 TAGD := `git describe --tags --always --abbrev --dirty --broken`
 CGR_ARCHS := "aarch64,amd64" # "x86,armv7"
 LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/print-cert/internal/build.Version=" + TAGD + "'\""
+LD_STATIC := "-ldflags \"-X 'github.com/mt-inside/print-cert/internal/build.Version=" + TAGD + "' -w -linkmode external -extldflags '-static'\""
 MELANGE := "melange"
 APKO    := "apko"
 
@@ -39,13 +40,20 @@ render-mod-graph:
 render-pkg-graph:
 	godepgraph -s -onlyprefixes github.com/mt-inside ./cmd/http-log | dot -Tpng -o pkg_graph.png
 
-build: test
+build-dev: test
+	# Use CGO here, like in the container, so this binary is pretty representative.
 	# We don't statically link here (although we do use CGO), so the resulting binary isn't quite the same as what ends up in the container, but close
 	go build {{LD_COMMON}} ./cmd/print-cert
 
-build-no-cgo: test
+build-dev-no-cgo: test
 	# For testing; we expect it to be built *with* CGO in the wild
 	CGO_ENABLED=0 go build {{LD_COMMON}} ./cmd/print-cert
+
+# Don't lint/test, because it doesn't work in various CI envs
+build-ci *ARGS:
+	# We use CGO, so that we get libc's sophisticated name resolution etc. This is basically pointless because we're in a container which won't have NIS/LDAP/etc set up, but maybe someone wants to mount that config in?
+	# Since we use CGO, force gcc's ld, and tell it to statically link libc in, for ease of packaging in a container
+	go build {{LD_STATIC}} {{ARGS}} ./cmd/print-cert
 
 install: test
 	go install {{LD_COMMON}} ./cmd/print-cert
