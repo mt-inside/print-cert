@@ -84,7 +84,7 @@ func main() {
 	cmd.Flags().BoolP("body-full", "B", false, "Print full HTTP response body")
 
 	// Recall: it's --foo=false for Viper, not --no-foo
-	cmd.Flags().BoolP("requests", "V", true, "Print summary of the requests being sent. Nothing that can't be inferred from the arguments provided, but this option spells it out")
+	cmd.Flags().BoolP("requests", "V", false, "Print summary of the requests being sent. Nothing that can't be inferred from the arguments provided, but this option spells it out")
 	cmd.Flags().StringP("timestamps", "", "none", "Print timestamps: none, abs, rel.")
 	cmd.Flags().StringP("verbosity", "v", "error", "Trace requests/responses as they happen, in addition to printing info at the end")
 
