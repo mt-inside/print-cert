@@ -52,7 +52,7 @@ build-ci *ARGS:
 	CGO_ENABLED=0 go build {{LD_COMMON}} {{ARGS}} ./cmd/print-cert
 
 install: test
-	go install {{LD_COMMON}} ./cmd/print-cert
+	CGO_ENABLED=0 go install {{LD_COMMON}} ./cmd/print-cert
 
 package: test
 	# if there's >1 package in this directory, apko seems to pick the _oldest_ without fail
