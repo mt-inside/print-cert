@@ -10,11 +10,11 @@ import (
 	"github.com/peterzen/goresolver"
 
 	"github.com/mt-inside/go-usvc"
-	"github.com/mt-inside/print-cert/pkg/state"
-
 	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/utils"
+
+	"github.com/mt-inside/print-cert/pkg/state"
 )
 
 func dnsSystem(

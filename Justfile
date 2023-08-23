@@ -3,15 +3,17 @@ set dotenv-load
 default:
 	@just --list --unsorted --color=always
 
+REPO := "print-cert"
+CMD := "print-cert"
 DH_USER := "mtinside"
 GH_USER := "mt-inside"
-DH_REPO := "docker.io/" + DH_USER + "/print-cert"
-GH_REPO := "ghcr.io/" + GH_USER + "/print-cert"
+DH_REPO := "docker.io/" + DH_USER + "/" + CMD
+GH_REPO := "ghcr.io/" + GH_USER + "/" + CMD
 TAG := `git describe --tags --always --abbrev`
 TAGD := `git describe --tags --always --abbrev --dirty --broken`
 CGR_ARCHS := "aarch64,amd64" # "x86,armv7"
-LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/print-cert/internal/build.Version=" + TAGD + "'\""
-LD_STATIC := "-ldflags \"-X 'github.com/mt-inside/print-cert/internal/build.Version=" + TAGD + "' -w -linkmode external -extldflags '-static'\""
+LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/" + REPO + "/internal/build.Version=" + TAGD + "'\""
+LD_STATIC := "-ldflags \"-X 'github.com/mt-inside/" + REPO + "/internal/build.Version=" + TAGD + "' -w -linkmode external -extldflags '-static'\""
 MELANGE := "melange"
 APKO    := "apko"
 
@@ -28,7 +30,7 @@ generate:
 
 lint: generate
 	gofmt -s -w .
-	goimports -local github.com/mt-inside/http-log -w .
+	goimports -local github.com/mt-inside/{{REPO}} -w .
 	go vet ./...
 	staticcheck ./...
 	golangci-lint run ./... # TODO: --enable-all
@@ -40,19 +42,19 @@ render-mod-graph:
 	go mod graph | modgraphviz | dot -Tpng -o mod_graph.png
 
 render-pkg-graph:
-	godepgraph -s -onlyprefixes github.com/mt-inside ./cmd/http-log | dot -Tpng -o pkg_graph.png
+	godepgraph -s -onlyprefixes github.com/mt-inside ./cmd/{{CMD}} | dot -Tpng -o pkg_graph.png
 
 build-dev: test
-	CGO_ENABLED=0 go build {{LD_COMMON}} ./cmd/print-cert
+	CGO_ENABLED=0 go build {{LD_COMMON}} ./cmd/{{CMD}}
 
 # Don't lint/test, because it doesn't work in various CI envs
 build-ci *ARGS:
 	# Ideally we'd use CGO, because the libc/nsswitch-based name resolution is probably very useful for some people.
 	# However, it's very difficult to cross-compile, and would ideally be statically-linked, for which instructions vary on mac etc.
-	CGO_ENABLED=0 go build {{LD_COMMON}} {{ARGS}} ./cmd/print-cert
+	CGO_ENABLED=0 go build {{LD_COMMON}} {{ARGS}} ./cmd/{{CMD}}
 
 install: test
-	CGO_ENABLED=0 go install {{LD_COMMON}} ./cmd/print-cert
+	CGO_ENABLED=0 go install {{LD_COMMON}} ./cmd/{{CMD}}
 
 package: test
 	# if there's >1 package in this directory, apko seems to pick the _oldest_ without fail
@@ -62,8 +64,8 @@ package: test
 	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
 
 image-local:
-	{{APKO}} build --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{GH_REPO}}:{{TAG}} print-cert.tar
-	docker load < print-cert.tar
+	{{APKO}} build --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{GH_REPO}}:{{TAG}} {{CMD}}.tar
+	docker load < {{CMD}}.tar
 image-publish:
 	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
 	{{APKO}} login ghcr.io   -u {{GH_USER}} --password "${GH_TOKEN}"
@@ -90,16 +92,16 @@ clean:
 	rm -f mod_graph.png pkg_graph.png
 	rm -f sbom-*
 	rm -rf packages/
-	rm -f print-cert.tar
-	rm -f print-cert
+	rm -f {{CMD}}.tar
+	rm -f {{CMD}}
 	rm -f melange.rsa*
 
 print-cert *ARGS: test
-	go run {{LD_COMMON}} ./cmd/print-cert {{ARGS}} localhost:8080
+	go run {{LD_COMMON}} ./cmd/{{CMD}} {{ARGS}} localhost:8080
 
 print-cert-mtls-jwt *ARGS: test
 	# FIXME: hard-coded path
-	go run {{LD_COMMON}} ./cmd/print-cert -k=ssl/client-key.pem -c=ssl/client-cert.pem -C=ssl/server-ca-cert.pem --bearer /Users/matt/work/personal/talks/istio-demo-master/41/pki/one.jwt -s example.com -T -B {{ARGS}} localhost:8080
+	go run {{LD_COMMON}} ./cmd/{{CMD}} -k=ssl/client-key.pem -c=ssl/client-cert.pem -C=ssl/server-ca-cert.pem --bearer /Users/matt/work/personal/talks/istio-demo-master/41/pki/one.jwt -s example.com -T -B {{ARGS}} localhost:8080
 
 curl-mtls-jwt-body *ARGS: test
 	# FIXME: hard-coded path
