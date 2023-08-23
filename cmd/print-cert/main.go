@@ -147,6 +147,23 @@ func appMain(cmd *cobra.Command, args []string) {
 		b.PrintWarn("TLS printing options have no effect when TLS is disabled")
 	}
 
+	// TODO mutex --http-3 and --no-tls
+	// h2 and h3 require tls (see http-log)
+	// On upgrades:
+	// - h1 -> h2 - not so much an upgrade, negotiated by ALPN. Think there's also another way for the server to heavily hint at a move to h2?
+	// - h1/2 -> h3 - alt-svc header
+	// printing
+	// - dns module should look for https and SVCB RRs, print them
+	// - -m (httpSummary) should extract, parse, and call out any h3 upgrade offers from alt-svc
+	//   - and should also note DNS signals of h3 availability
+	// philosphy: we're a low-level transport inspector, not a client; we don't do redirects unless told (mantra: don't make >1 connection)
+	// What we do with flags etc
+	// - just go straight to h3 if --http-3 (even if no DNS)
+	// - look for DNS records, and do h3 if they say so, unless --no-http-3
+	// - follow alt-svc if redirects are enabled (message that alt-svc not followed if they're off, like with location header)
+	// - ie with no flags, you'll get one connection, but it'll be what a client would have done
+	// - but with flags can force h1 (tcp & no alpn to h2), h1/h2 (tcp despite any dns/alt-svc), h3
+
 	// Shame pflag can't do this for us.
 	timestamps := viper.GetString("timestamps")
 	if timestamps != "none" && timestamps != "abs" && timestamps != "rel" {
