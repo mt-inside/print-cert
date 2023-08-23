@@ -4,6 +4,8 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/mt-inside/print-cert.svg)](https://pkg.go.dev/github.com/mt-inside/print-cert)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mt-inside/print-cert)](https://goreportcard.com/report/github.com/mt-inside/print-cert)
 
+TODO aciinema etc
+
 ## Use
 
 Run from container image:
