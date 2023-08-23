@@ -33,11 +33,17 @@ func dnsSystem(
 	if ip != nil {
 		names, err := net.LookupAddr(ip.String())
 		b.CheckPrintErr(err) // TODO: should save the errors rather than print here, and print at op time
+		if err != nil {
+			return
+		}
 		responseData.DnsSystemResolves = names
-		log.Info("Provided target %s is already an IP.", ip)
+		log.Info("Provided target %s is already an IP", "IP", ip)
 	} else {
 		ips, err := net.LookupIP(host)
 		b.CheckPrintErr(err)
+		if err != nil {
+			return
+		}
 		responseData.DnsSystemResolves = utils.MapToString(ips)
 		ip = ips[0]
 		log.Info("Connection will use first-returned system-resolved IP", "IP", ip)
