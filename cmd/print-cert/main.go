@@ -40,7 +40,7 @@ func main() {
 		Use:   build.Name + " target[:port]", // Yes, should contain argv[0] (this is parsed out and used as Cobra's idea of what we're called)
 		Short: "TODO short",                  // Not ever shown for a binary? Only to summarise this Command in one line if it were a sub-command?
 		Long:  "Note: all summaries are enabled by default. Disable with --foo=false",
-		Example: build.Name + " localhost:8080 --trace --timestamps rel -d=false -B\n" +
+		Example: build.Name + " localhost:8080 -v debug --timestamps rel -d=false -B\n" +
 			"https://office.com/setup => " + build.Name + " -L office.com --path /setup\n" +
 			"http://neverssl.com => " + build.Name + " --no-tls neverssl.com",
 		Version: build.Version,
