@@ -164,6 +164,8 @@ func appMain(cmd *cobra.Command, args []string) {
 	// - ie with no flags, you'll get one connection, but it'll be what a client would have done
 	// - but with flags can force h1 (tcp & no alpn to h2), h1/h2 (tcp despite any dns/alt-svc), h3
 
+	// TODO: mutex --http-11 and --no-tls, as, while it's possible, Go's client just won't do it (see plaintext.go)
+
 	// Shame pflag can't do this for us.
 	timestamps := viper.GetString("timestamps")
 	if timestamps != "none" && timestamps != "abs" && timestamps != "rel" {

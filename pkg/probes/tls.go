@@ -121,7 +121,7 @@ func buildTlsClient(
 			ResponseHeaderTimeout: requestData.Timeout,
 			DisableCompression:    true,
 			TLSClientConfig:       &tlsConfig,
-			ForceAttemptHTTP2:     !requestData.HttpForce11, // Because we provide our own TLSClientConfig, golang defaults to no ALPN, we have to insist. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
+			ForceAttemptHTTP2:     !requestData.HttpForce11, // Because we provide our own TLSClientConfig, golang defaults to sending empty ALPN (which will result in h1.1). Setting this to true sends ALPN ["h2, "http/1.1"]. Note that just setting TLSClientConfig.NextProtos isn't enough; this flag adds upgrade handler functions and other stuff
 		},
 	}
 	// Assuming we don't want krb, just point to the non-spnego parts of the struct (hack)
