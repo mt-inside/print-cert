@@ -3,6 +3,8 @@ package probes
 import (
 	"net/http"
 
+	"golang.org/x/net/http2"
+
 	"github.com/mt-inside/print-cert/pkg/state"
 
 	"github.com/mt-inside/http-log/pkg/bios"
@@ -16,14 +18,27 @@ func buildPlaintextClient(
 	rtData *state.RoundTripData,
 	responseData *state.ResponseData,
 ) *http.Client {
-	c := &http.Client{
-		Transport: &http.Transport{
+	var t http.RoundTripper
+
+	if !requestData.HttpForce11 {
+		t = &http2.Transport{
+			AllowHTTP:          true,                                                   // Allow use of the "http" scheme. Just sends it; doesn't do `Update: h2c`
+			DialTLSContext:     getFakeTLSDialContext(s, b, requestData, responseData), // To do plaintext h2, you have to give a function that, despite the name, will return a non-TLS connection.
+			PingTimeout:        requestData.Timeout,
+			WriteByteTimeout:   requestData.Timeout,
+			DisableCompression: true,
+		}
+	} else {
+		t = &http.Transport{
 			DialContext:           getDialContext(s, b, requestData, responseData),
 			ResponseHeaderTimeout: requestData.Timeout,
 			DisableCompression:    true,
-			// Note that this is pointless because Go's http2 won't work without TLS. This flag doesn't attempt anything. You can change this to an http2.Transport, and it'll tell you "http" is an invalid scheme.
-			ForceAttemptHTTP2: !requestData.HttpForce11, // Because there's no TLS, there's no ALPN, so we have to insist.
-		},
+			// Note that ForceAttemptHTTP2 doesn't do anything without TLS
+		}
+	}
+
+	c := &http.Client{
+		Transport: t,
 	}
 
 	c.CheckRedirect = getCheckRedirect(s, b, requestData, responseData)

@@ -2,6 +2,7 @@ package probes
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -18,6 +19,13 @@ import (
 	"github.com/mt-inside/http-log/pkg/output"
 	hlu "github.com/mt-inside/http-log/pkg/utils"
 )
+
+// Throws away the tls.Config, and returns a plaintext stream
+func getFakeTLSDialContext(s output.TtyStyler, b bios.Bios, requestData *state.RequestData, responseData *state.ResponseData) func(context.Context, string, string, *tls.Config) (net.Conn, error) {
+	return func(ctx context.Context, network, address string, tlsCfg *tls.Config) (net.Conn, error) {
+		return getDialContext(s, b, requestData, responseData)(ctx, network, address)
+	}
+}
 
 func getDialContext(s output.TtyStyler, b bios.Bios, requestData *state.RequestData, responseData *state.ResponseData) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, network, address string) (net.Conn, error) {
