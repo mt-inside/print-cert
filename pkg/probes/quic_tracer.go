@@ -13,78 +13,80 @@ import (
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
-type myTracer struct {
-	s  output.TtyStyler
-	b  bios.Bios
-	pD *state.ResponseData
-}
+func newTracer(
+	s output.TtyStyler,
+	b bios.Bios,
+	pD *state.ResponseData,
+) *logging.ConnectionTracer {
+	return &logging.ConnectionTracer{
+		StartedConnection: func(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
+			pD.StartTime = time.Now() // start and connection times are an even worse concept with lazy connections like this
+			log.Info("Dialing", "net", "udp", "addr", remote)
+			pD.TransportConnTime = time.Now()
+			log.Info("Connected", "to", remote, "from", local)
 
-func (t *myTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
-	t.pD.StartTime = time.Now() // start and connection times are an even worse concept with lazy connections like this
-	log.Info("Dialing", "net", "udp", "addr", remote)
-	t.pD.TransportConnTime = time.Now()
-	log.Info("Connected", "to", remote, "from", local)
+			pD.TransportLocalAddr = local
+			pD.TransportRemoteAddr = remote
+		},
 
-	t.pD.TransportLocalAddr = local
-	t.pD.TransportRemoteAddr = remote
-}
-
-func (t *myTracer) NegotiatedVersion(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
-	t.pD.TransportVersion = chosen
-}
-func (t *myTracer) ClosedConnection(err error) {
-	// Don't believe the connection will currently close as they're persistent; we just quit
-	fmt.Printf("Closed (err only?) %v\n", err)
-}
-func (t *myTracer) SentTransportParameters(*logging.TransportParameters) {
-}
-func (t *myTracer) ReceivedTransportParameters(*logging.TransportParameters) {
-}
-func (t *myTracer) RestoredTransportParameters(parameters *logging.TransportParameters) {
-}
-func (t *myTracer) SentLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
-}
-func (t *myTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
-}
-func (t *myTracer) ReceivedVersionNegotiationPacket(dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
-}
-func (t *myTracer) ReceivedRetry(*logging.Header) {
-}
-func (t *myTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, frames []logging.Frame) {
-}
-func (t *myTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, frames []logging.Frame) {
-}
-func (t *myTracer) BufferedPacket(logging.PacketType, logging.ByteCount) {
-}
-func (t *myTracer) DroppedPacket(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
-}
-func (t *myTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
-}
-func (t *myTracer) AcknowledgedPacket(logging.EncryptionLevel, logging.PacketNumber) {
-}
-func (t *myTracer) LostPacket(logging.EncryptionLevel, logging.PacketNumber, logging.PacketLossReason) {
-}
-func (t *myTracer) UpdatedCongestionState(logging.CongestionState) {
-}
-func (t *myTracer) UpdatedPTOCount(value uint32) {
-}
-func (t *myTracer) UpdatedKeyFromTLS(logging.EncryptionLevel, logging.Perspective) {
-}
-func (t *myTracer) UpdatedKey(generation logging.KeyPhase, remote bool) {
-}
-func (t *myTracer) DroppedEncryptionLevel(logging.EncryptionLevel) {
-}
-func (t *myTracer) DroppedKey(generation logging.KeyPhase) {
-}
-func (t *myTracer) SetLossTimer(logging.TimerType, logging.EncryptionLevel, time.Time) {
-}
-func (t *myTracer) LossTimerExpired(logging.TimerType, logging.EncryptionLevel) {
-}
-func (t *myTracer) LossTimerCanceled() {
-}
-func (t *myTracer) Close() {
-	// Don't believe the connection will currently close as they're persistent; we just quit
-	fmt.Println("Close")
-}
-func (t *myTracer) Debug(name, msg string) {
+		NegotiatedVersion: func(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
+			pD.TransportVersion = chosen
+		},
+		ClosedConnection: func(err error) {
+			// Don't believe the connection will currently close as they're persistent; we just quit
+			fmt.Printf("Closed (err only?) %v\n", err)
+		},
+		SentTransportParameters: func(*logging.TransportParameters) {
+		},
+		ReceivedTransportParameters: func(*logging.TransportParameters) {
+		},
+		RestoredTransportParameters: func(parameters *logging.TransportParameters) {
+		},
+		SentLongHeaderPacket: func(hdr *logging.ExtendedHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
+		},
+		SentShortHeaderPacket: func(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
+		},
+		ReceivedVersionNegotiationPacket: func(dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
+		},
+		ReceivedRetry: func(*logging.Header) {
+		},
+		ReceivedLongHeaderPacket: func(hdr *logging.ExtendedHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
+		},
+		ReceivedShortHeaderPacket: func(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
+		},
+		BufferedPacket: func(logging.PacketType, logging.ByteCount) {
+		},
+		DroppedPacket: func(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
+		},
+		UpdatedMetrics: func(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
+		},
+		AcknowledgedPacket: func(logging.EncryptionLevel, logging.PacketNumber) {
+		},
+		LostPacket: func(logging.EncryptionLevel, logging.PacketNumber, logging.PacketLossReason) {
+		},
+		UpdatedCongestionState: func(logging.CongestionState) {
+		},
+		UpdatedPTOCount: func(value uint32) {
+		},
+		UpdatedKeyFromTLS: func(logging.EncryptionLevel, logging.Perspective) {
+		},
+		UpdatedKey: func(generation logging.KeyPhase, remote bool) {
+		},
+		DroppedEncryptionLevel: func(logging.EncryptionLevel) {
+		},
+		DroppedKey: func(generation logging.KeyPhase) {
+		},
+		SetLossTimer: func(logging.TimerType, logging.EncryptionLevel, time.Time) {
+		},
+		LossTimerExpired: func(logging.TimerType, logging.EncryptionLevel) {
+		},
+		LossTimerCanceled: func() {
+		},
+		Close: func() {
+			// Don't believe the connection will currently close as they're persistent; we just quit
+			fmt.Println("Close")
+		},
+		Debug: func(name, msg string) {
+		},
+	}
 }
