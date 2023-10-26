@@ -135,8 +135,8 @@ func buildTlsClient(
 			DisableCompression: true,
 			TLSClientConfig:    &tlsConfig,
 			QuicConfig: &quic.Config{
-				Tracer: func(ctx context.Context, perspective logging.Perspective, connId quic.ConnectionID) logging.ConnectionTracer {
-					return &myTracer{s, b, responseData}
+				Tracer: func(ctx context.Context, perspective logging.Perspective, connId quic.ConnectionID) *logging.ConnectionTracer {
+					return newTracer(s, b, responseData)
 				},
 			},
 			// No need to override the Dialer, becuase we have the Tracer (but it looks like it can be done by giving a Dial(), which calls quic.DialAddrEarly and inspects the resulting quic.EarlyConnection)

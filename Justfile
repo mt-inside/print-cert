@@ -81,6 +81,8 @@ image-inspect:
 	docker buildx imagetools inspect {{GH_REPO}}:{{TAG}}
 sbom-show:
 	docker sbom {{GH_REPO}}:{{TAG}}
+vulns:
+	docker scout cves {{GH_REPO}}:{{TAG}}
 snyk:
 	snyk test .
 	snyk container test {{GH_REPO}}:{{TAG}}
