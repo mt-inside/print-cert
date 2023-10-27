@@ -78,6 +78,18 @@ jobs:
           # Default value for melange-build.signing-key-path
           keyring-append: ${{ github.workspace }}/melange.rsa.pub
 
+      - name: Build & Publish OCI with shell
+        id: apko-shell
+        # GH: chainguard-images/action/apko-publish
+        uses: distroless/actions/apko-publish@main
+        with:
+          config: apko-shell.yaml
+          archs: x86_64,aarch64
+          # Will be a SHA, unless this commit is tagged. Which is ideal tbh
+          tag: ghcr.io/mt-inside/print-cert:${{ github.ref_name }}-shell ghcr.io/mt-inside/print-cert:latest-shell
+          # Default value for melange-build.signing-key-path
+          keyring-append: ${{ github.workspace }}/melange.rsa.pub
+
       # Need to install cosign. Also what keymat does it sign with?
       # - name: Sign OCI
       #   shell: bash

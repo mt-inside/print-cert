@@ -9,13 +9,14 @@ DH_USER := "mtinside"
 GH_USER := "mt-inside"
 DH_REPO := "docker.io/" + DH_USER + "/" + CMD
 GH_REPO := "ghcr.io/" + GH_USER + "/" + CMD
-TAG := `git describe --tags --always --abbrev`
-TAGD := `git describe --tags --always --abbrev --dirty --broken`
+TAG := if env_var("SHELL") == "true" { `git describe --tags --always --abbrev`+"-shell" } else { `git describe --tags --always --abbrev` }
+TAGD := if env_var("SHELL") == "true" { `git describe --tags --always --abbrev --dirty --broken`+"-shell" } else { `git describe --tags --always --abbrev --dirty --broken` }
 CGR_ARCHS := "aarch64,amd64" # "x86,armv7"
 LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/" + REPO + "/internal/build.Version=" + TAGD + "'\""
 LD_STATIC := "-ldflags \"-X 'github.com/mt-inside/" + REPO + "/internal/build.Version=" + TAGD + "' -w -linkmode external -extldflags '-static'\""
 MELANGE := "melange"
 APKO    := "apko"
+APKO_CFG := if env_var("SHELL") == "true" { "apko-shell.yaml" } else { "apko.yaml" }
 
 tools-install:
 	go install golang.org/x/tools/cmd/goimports@latest
@@ -64,12 +65,12 @@ package: test
 	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
 
 image-local:
-	{{APKO}} build --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{GH_REPO}}:{{TAG}} {{CMD}}.tar
+	{{APKO}} build --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} {{APKO_CFG}} {{GH_REPO}}:{{TAG}} {{CMD}}.tar
 	docker load < {{CMD}}.tar
 image-publish:
 	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
 	{{APKO}} login ghcr.io   -u {{GH_USER}} --password "${GH_TOKEN}"
-	{{APKO}} publish --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{GH_REPO}}:{{TAG}} {{DH_REPO}}:{{TAG}}
+	{{APKO}} publish --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} {{APKO_CFG}} {{GH_REPO}}:{{TAG}} {{DH_REPO}}:{{TAG}}
 cosign-sign:
 	# Experimental includes pushing the signature to a Rekor transparency log, default: rekor.sigstore.dev
 	COSIGN_EXPERIMENTAL=1 cosign sign {{DH_REPO}}:{{TAG}}
