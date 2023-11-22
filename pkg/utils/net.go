@@ -9,6 +9,7 @@ import "net"
 // Thus either:
 // - explicitly given value, if conformant
 // - HTTP Host value (ie explicit or target), if conformant
+// FIXME: failing to stop an SNI of foo:port being used / checked against cert SANs when requesting foo:port (with no explicit Host or SN)
 func ServerNameConformant(sn string) bool {
 	// No IPs
 	if ip := net.ParseIP(sn); ip != nil {

@@ -153,7 +153,7 @@ func buildHttpRequest(
 		Fragment: rtData.HttpPath.EscapedFragment(),
 	}
 
-	req, err := http.NewRequestWithContext(ctx, requestData.HttpMethod, l7Addr.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, requestData.HttpMethod, l7Addr.String(), requestData.BodyReader)
 	b.Unwrap(err)
 
 	req.Host = rtData.HttpHost

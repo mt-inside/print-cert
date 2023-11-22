@@ -3,6 +3,7 @@ package state
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -33,6 +34,8 @@ type RequestData struct {
 
 	AuthKrb         bool
 	AuthBearerToken string
+
+	BodyReader io.Reader
 }
 
 func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName string) *RequestData {
@@ -67,6 +70,11 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 		bytes, err := os.ReadFile(viper.GetString("bearer"))
 		b.Unwrap(err)
 		requestData.AuthBearerToken = strings.TrimSpace(string(bytes))
+	}
+
+	/* Request body */
+	if viper.Get("req-body") != "" {
+		requestData.BodyReader = strings.NewReader(viper.GetString("req-body"))
 	}
 
 	return requestData

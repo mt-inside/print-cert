@@ -56,6 +56,7 @@ func main() {
 	cmd.Flags().StringP("sni", "", "", "TLS SNI ServerName")
 	cmd.Flags().StringP("host", "", "", "HTTP Host / :authority header")
 	cmd.Flags().StringP("path", "", "/", "HTTP path to request")
+	cmd.Flags().StringP("req-body", "", "", "HTTP body to send in request")
 	cmd.Flags().DurationP("timeout", "", 5*time.Second, "Timeout for each individual network operation")
 
 	/* TLS and auth */
