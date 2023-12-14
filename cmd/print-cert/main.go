@@ -57,6 +57,7 @@ func main() {
 	cmd.Flags().StringP("host", "", "", "HTTP Host / :authority header")
 	cmd.Flags().StringP("path", "", "/", "HTTP path to request")
 	cmd.Flags().StringP("req-body", "", "", "HTTP body to send in request")
+	// TODO: timeout=0 should mean inf; currently something times out instantly - check everything we pass this to and see what their semantics are. Might have to pass Duration::MAX to some of them
 	cmd.Flags().DurationP("timeout", "", 5*time.Second, "Timeout for each individual network operation")
 
 	/* TLS and auth */
