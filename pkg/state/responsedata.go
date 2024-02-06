@@ -262,7 +262,7 @@ func (pD *ResponseData) Print(
 			op.Indent()
 			if requestData.AuthBearerToken != "" {
 				if token, err := parser.JWTNoSignature(requestData.AuthBearerToken); err == nil {
-					op.Linef("Presented bearer token: %s", s.JWTSummary(token))
+					op.Linef("Presented bearer token: %s", s.JWTFull(token))
 				} else {
 					panic(err)
 				}
