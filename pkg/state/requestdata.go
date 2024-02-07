@@ -35,7 +35,8 @@ type RequestData struct {
 	AuthKrb         bool
 	AuthBearerToken string
 
-	BodyReader io.Reader
+	BodyReader   io.Reader
+	ExtraHeaders map[string]string
 }
 
 func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName string) *RequestData {
@@ -47,6 +48,7 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 		HttpForce11:       viper.GetBool("http-11"),
 		HttpForce3:        viper.GetBool("http-3"),
 		AuthKrb:           viper.GetBool("kerberos"),
+		ExtraHeaders:      map[string]string{},
 	}
 
 	/* Load TLS material */
@@ -75,6 +77,16 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 	/* Request body */
 	if viper.Get("req-body") != "" {
 		requestData.BodyReader = strings.NewReader(viper.GetString("req-body"))
+	}
+
+	/* Request headers */
+	if viper.Get("req-header") != "" {
+		kv := strings.Split(viper.GetString("req-header"), "=")
+		if len(kv) != 2 {
+			b.PrintWarn("Invalid format for --req-header")
+		} else {
+			requestData.ExtraHeaders[kv[0]] = kv[1]
+		}
 	}
 
 	return requestData

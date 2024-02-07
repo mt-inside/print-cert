@@ -165,6 +165,11 @@ func buildHttpRequest(
 	req.Header.Add("accept", "*/*")
 	req.Header.Add("user-agent", build.NameAndVersion())
 
+	// Add these after we've set the built-in ones above, so the user can override them
+	for k, v := range requestData.ExtraHeaders {
+		req.Header.Set(k, v)
+	}
+
 	return req, cancel
 }
 
