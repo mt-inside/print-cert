@@ -46,8 +46,19 @@ func main() {
 		Version: build.Version,
 		Args:    cobra.ExactArgs(1),
 		// We don't use the RunE version of this, because we bail early (os.Exit) if we hit any errors. Ideally we'd bubble them all up to here and return them, but if we do that, Cobra prints Usage, which is totally not what you want if there's been like a connection failure. There's a Command::SilenceErrors flag, but it also stops the usage being printed on an arg parse error
+		// TODO: I think the proper way to use this is to have a RunE, which returns an errors for extended args validation only. Then call into the main logic (in /pkg) and don't bubble those errors
 		Run: appMain,
 	}
+
+	// Print our version if the user gets the flags wrong
+	// - parse errors call Usage()
+	// - -h calls Help(), which calls Usage()
+	defaultUsage := cmd.UsageFunc()
+	cmd.SetUsageFunc(func(c *cobra.Command) error {
+		fmt.Println(build.NameAndVersion())
+		fmt.Println()
+		return defaultUsage(c)
+	})
 
 	// pflag doesn't support flag groups, but we can at least preserve a grouped order
 	cmd.Flags().SortFlags = false
