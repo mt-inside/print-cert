@@ -56,7 +56,7 @@ func newTracer(
 		},
 		BufferedPacket: func(logging.PacketType, logging.ByteCount) {
 		},
-		DroppedPacket: func(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
+		DroppedPacket: func(logging.PacketType, logging.PacketNumber, logging.ByteCount, logging.PacketDropReason) {
 		},
 		UpdatedMetrics: func(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
 		},
