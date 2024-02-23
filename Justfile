@@ -13,7 +13,8 @@ TAG := if env_var_or_default("SHELL", "false") == "true" { `git describe --tags 
 TAGD := if env_var_or_default("SHELL", "false") == "true" { `git describe --tags --always --abbrev --dirty --broken`+"-shell" } else { `git describe --tags --always --abbrev --dirty --broken` }
 CGR_ARCHS := "aarch64,amd64" # "x86,armv7"
 LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/" + REPO + "/internal/build.Version=" + TAGD + "'\""
-LD_STATIC := "-ldflags \"-X 'github.com/mt-inside/" + REPO + "/internal/build.Version=" + TAGD + "' -w -linkmode external -extldflags '-static'\""
+LD_RELEASE := "-ldflags \"-X 'github.com/mt-inside/" + REPO + "/internal/build.Version=" + TAGD + "' -w -s\""
+LD_STATIC := "-ldflags \"-X 'github.com/mt-inside/" + REPO + "/internal/build.Version=" + TAGD + "' -linkmode external -extldflags '-static'\""
 MELANGE := "melange"
 APKO    := "apko"
 APKO_CFG := if env_var_or_default("SHELL", "false") == "true" { "apko-shell.yaml" } else { "apko.yaml" }
@@ -52,10 +53,11 @@ build-dev: test
 build-ci *ARGS:
 	# Ideally we'd use CGO, because the libc/nsswitch-based name resolution is probably very useful for some people.
 	# However, it's very difficult to cross-compile, and would ideally be statically-linked, for which instructions vary on mac etc.
-	CGO_ENABLED=0 go build {{LD_COMMON}} -v {{ARGS}} ./cmd/{{CMD}}
+	CGO_ENABLED=0 go build {{LD_RELEASE}} -v {{ARGS}} ./cmd/{{CMD}}
 
 install: test
 	CGO_ENABLED=0 go install {{LD_COMMON}} ./cmd/{{CMD}}
+	CGO_ENABLED=0 go install {{LD_COMMON}} ./cmd/local-cert
 
 package: test
 	# if there's >1 package in this directory, apko seems to pick the _oldest_ without fail
