@@ -301,11 +301,13 @@ func (pD *ResponseData) Print(
 		/* RATELIMIT */
 
 		if pD.HttpRatelimit != nil {
+			op.NewLine()
 			op.Tabs()
-			op.Printf("ratelimit: expiring bucket %s/%s resets in %s. Policies", s.Number(pD.HttpRatelimit.Remain), s.Number(pD.HttpRatelimit.Bucket), s.Duration(pD.HttpRatelimit.Reset))
+			op.Printf("Ratelimit: policies")
 			for _, policy := range pD.HttpRatelimit.Policies {
 				op.Printf(" %s/%s", s.Number(policy.Bucket), s.Duration(policy.Window))
 			}
+			op.Printf("; soonest expiring bucket %s/%s, resets in %s", s.Number(pD.HttpRatelimit.Remain), s.Number(pD.HttpRatelimit.Bucket), s.Duration(pD.HttpRatelimit.Reset))
 			op.NewLine()
 		}
 
