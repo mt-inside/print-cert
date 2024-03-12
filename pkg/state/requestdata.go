@@ -80,12 +80,12 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 	}
 
 	/* Request headers */
-	if viper.Get("req-header") != "" {
-		kv := strings.Split(viper.GetString("req-header"), "=")
-		if len(kv) != 2 {
+	for _, kv := range viper.GetStringSlice("req-header") {
+		pair := strings.Split(kv, "=")
+		if len(pair) != 2 {
 			b.PrintWarn("Invalid format for --req-header")
 		} else {
-			requestData.ExtraHeaders[kv[0]] = kv[1]
+			requestData.ExtraHeaders[pair[0]] = pair[1]
 		}
 	}
 
