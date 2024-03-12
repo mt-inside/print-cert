@@ -44,7 +44,7 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 		Timeout:           viper.GetDuration("timeout"),
 		FollowRedirects:   viper.GetBool("location"),
 		DnsSystemResolver: dnsResolverName,
-		HttpMethod:        "GET",
+		HttpMethod:        viper.GetString("method"),
 		HttpForce11:       viper.GetBool("http-11"),
 		HttpForce3:        viper.GetBool("http-3"),
 		AuthKrb:           viper.GetBool("kerberos"),

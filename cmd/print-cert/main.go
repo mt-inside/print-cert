@@ -66,6 +66,7 @@ func main() {
 	/* Request */
 	cmd.Flags().StringP("sni", "", "", "TLS SNI ServerName")
 	cmd.Flags().StringP("host", "", "", "HTTP Host / :authority header")
+	cmd.Flags().StringP("method", "", "GET", "HTTP method")
 	cmd.Flags().StringP("path", "", "/", "HTTP path to request")
 	cmd.Flags().StringP("req-body", "", "", "HTTP body to send in request")
 	cmd.Flags().StringSliceP("req-header", "", []string{}, "HTTP headers to send in request, format: key=value")
