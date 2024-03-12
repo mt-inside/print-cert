@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"io"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/spf13/viper"
 
+	hlutils "github.com/mt-inside/http-log/pkg/utils"
+	"github.com/mt-inside/print-cert/internal/build"
 	"github.com/mt-inside/print-cert/pkg/utils"
 
 	"github.com/mt-inside/http-log/pkg/bios"
@@ -57,6 +60,11 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 		pair, err := tls.LoadX509KeyPair(viper.GetString("cert"), viper.GetString("key"))
 		b.Unwrap(err)
 		requestData.TlsClientPair = &pair
+	}
+	if requestData.TlsClientPair == nil && viper.Get("tls-algo") != "" {
+		var err error
+		requestData.TlsClientPair, err = hlutils.GenSelfSignedCa(context.Background(), viper.GetString("tls-algo"), build.Name)
+		b.Unwrap(err)
 	}
 
 	if viper.Get("ca") != "" {

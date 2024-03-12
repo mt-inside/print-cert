@@ -78,6 +78,7 @@ func main() {
 	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate")
 	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate")
 	cmd.Flags().StringP("key", "k", "", "Path to TLS client key")
+	cmd.Flags().StringP("tls-algo", "K", "", "Algorithm to use for generating self-signed client cert")
 	cmd.Flags().String("bearer", "", "Path to file whose contents should be used as Authorization: Bearer token")
 	cmd.Flags().BoolP("kerberos", "", false, "Negotiate Kerberos auth")
 	cmd.Flags().BoolP("http-11", "", false, "Force http1.1 (disallow TLS ALPN negitiation of http2)")
