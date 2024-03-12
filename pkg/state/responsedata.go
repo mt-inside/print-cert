@@ -98,6 +98,7 @@ type ResponseData struct {
 	HttpContentLength int64
 	HttpCompressed    bool
 	HttpRatelimit     *HttpRatelimit
+	HttpCORS          *HttpCORS
 
 	BodyError        error
 	BodyCompleteTime time.Time
@@ -115,6 +116,15 @@ type HttpRatelimit struct {
 type HttpRatelimitPolicy struct {
 	Bucket uint64
 	Window time.Duration
+}
+
+type HttpCORS struct {
+	Origin        string
+	Methods       []string
+	Headers       []string
+	ExposeHeaders []string
+	Credentials   bool
+	MaxAge        int64
 }
 
 func NewResponseData() *ResponseData {
@@ -309,6 +319,36 @@ func (pD *ResponseData) Print(
 			}
 			op.Printf("; soonest expiring bucket %s/%s, resets in %s", s.Number(pD.HttpRatelimit.Remain), s.Number(pD.HttpRatelimit.Bucket), s.Duration(pD.HttpRatelimit.Reset))
 			op.NewLine()
+		}
+
+		/* CORS */
+
+		if pD.HttpCORS != nil {
+			op.NewLine()
+			op.Tabs()
+			op.Println("CORS in effect:")
+
+			op.Indent()
+
+			op.Tabs()
+			op.Printf("Allowed origin(s): %s\n", s.Noun(pD.HttpCORS.Origin))
+
+			op.Tabs()
+			op.Printf("Allowed methods: %s\n", s.List(pD.HttpCORS.Methods, output.VerbStyle))
+
+			op.Tabs()
+			op.Printf("Allowed request headers: %s\n", s.List(pD.HttpCORS.Headers, output.AddrStyle))
+
+			op.Tabs()
+			op.Printf("Headers to expose to requester: %s\n", s.List(pD.HttpCORS.ExposeHeaders, output.AddrStyle))
+
+			op.Tabs()
+			op.Printf("Credentialed: %s\n", s.YesNo(pD.HttpCORS.Credentials))
+
+			op.Tabs()
+			op.Printf("Cache for: %s\n", s.Noun(pD.HttpCORS.MaxAge))
+
+			op.Dedent()
 		}
 
 		op.Dedent()

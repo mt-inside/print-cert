@@ -207,6 +207,7 @@ func httpRoundTrip(
 	/* Parsers / Enrichers */
 
 	responseData.HttpRatelimit = parser.Ratelimit(resp.Header)
+	responseData.HttpCORS = parser.CORS(resp.Header)
 	// TODO: should parse more things here. Like hops...
 
 	/* Body */

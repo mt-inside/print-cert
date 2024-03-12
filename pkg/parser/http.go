@@ -123,3 +123,40 @@ func parseDraft07(hs http.Header) *state.HttpRatelimit {
 
 	panic("TODO: parse ratelimit headers draft 07")
 }
+
+func CORS(hs http.Header) *state.HttpCORS {
+	if origin := hs.Get("access-control-allow-origin"); origin != "" {
+		cors := &state.HttpCORS{
+			Origin: origin,
+			MaxAge: 5, // default
+		}
+
+		if methods := hs.Values("access-control-allow-methods"); len(methods) != 0 {
+			cors.Methods = methods
+		}
+
+		if headers := hs.Values("access-control-allow-headers"); len(headers) != 0 {
+			cors.Headers = headers
+		}
+
+		if exposeHeaders := hs.Values("access-control-expose-headers"); len(exposeHeaders) != 0 {
+			cors.ExposeHeaders = exposeHeaders
+		}
+
+		if maxAge := hs.Get("access-control-max-age"); maxAge != "" {
+			if n, err := strconv.ParseInt(maxAge, 10, 64); err != nil {
+				cors.MaxAge = n
+			}
+		}
+
+		if creds := hs.Get("access-control-allow-credentials"); creds != "" {
+			if b, err := strconv.ParseBool(creds); err != nil {
+				cors.Credentials = b
+			}
+		}
+
+		return cors
+	}
+
+	return nil
+}
