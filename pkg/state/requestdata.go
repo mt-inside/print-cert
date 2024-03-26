@@ -36,6 +36,7 @@ type RequestData struct {
 	HttpForce3  bool // Necessarily forces QUIC too. h2 can also run over QUIC, but that's not supported by the library we use, so the two are coupled
 
 	AuthKrb         bool
+	AuthBasic       string
 	AuthBearerToken string
 
 	BodyReader   io.Reader
@@ -50,7 +51,7 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 		HttpMethod:        viper.GetString("method"),
 		HttpForce11:       viper.GetBool("http-11"),
 		HttpForce3:        viper.GetBool("http-3"),
-		AuthKrb:           viper.GetBool("kerberos"),
+		AuthKrb:           viper.GetBool("auth-kerberos"),
 		ExtraHeaders:      map[string]string{},
 	}
 
@@ -76,8 +77,13 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 
 	/* Load other request files */
 
-	if viper.Get("bearer") != "" {
-		bytes, err := os.ReadFile(viper.GetString("bearer"))
+	if viper.Get("auth-basic") != "" {
+		// User is expected to provide bob:password
+		requestData.AuthBasic = strings.TrimSpace(viper.GetString("auth-basic"))
+	}
+
+	if viper.Get("auth-bearer") != "" {
+		bytes, err := os.ReadFile(viper.GetString("auth-bearer"))
 		b.Unwrap(err)
 		requestData.AuthBearerToken = strings.TrimSpace(string(bytes))
 	}

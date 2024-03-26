@@ -3,6 +3,7 @@ package probes
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -157,6 +158,11 @@ func buildHttpRequest(
 	b.Unwrap(err)
 
 	req.Host = rtData.HttpHost
+
+	if requestData.AuthBasic != "" {
+		// User is expected to provide bob:password
+		req.Header.Add("authorization", fmt.Sprintf("Basic %s", base64.URLEncoding.EncodeToString([]byte(requestData.AuthBasic))))
+	}
 	if requestData.AuthBearerToken != "" {
 		req.Header.Add("authorization", fmt.Sprintf("Bearer %s", requestData.AuthBearerToken))
 	}
