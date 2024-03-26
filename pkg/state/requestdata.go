@@ -64,7 +64,9 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 	}
 	if requestData.TlsClientPair == nil && viper.Get("tls-algo") != "" {
 		var err error
-		requestData.TlsClientPair, err = hlutils.GenSelfSignedCa(context.Background(), viper.GetString("tls-algo"), build.Name)
+		ca, err := hlutils.GenSelfSignedCa(context.Background(), viper.GetString("tls-algo"), build.Name)
+		b.Unwrap(err)
+		requestData.TlsClientPair, err = hlutils.GenClientCert(context.Background(), build.Name, ca, viper.GetString("tls-algo"), build.Name)
 		b.Unwrap(err)
 	}
 
