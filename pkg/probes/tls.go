@@ -134,7 +134,7 @@ func buildTlsClient(
 		tr = &http3.RoundTripper{
 			DisableCompression: true,
 			TLSClientConfig:    &tlsConfig,
-			QuicConfig: &quic.Config{
+			QUICConfig: &quic.Config{
 				Tracer: func(ctx context.Context, perspective logging.Perspective, connId quic.ConnectionID) *logging.ConnectionTracer {
 					return newTracer(s, b, responseData)
 				},
