@@ -58,12 +58,12 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 
 	/* Load TLS material */
 
-	if viper.Get("cert") != "" || viper.Get("key") != "" {
+	if viper.GetString("cert") != "" || viper.GetString("key") != "" {
 		pair, err := tls.LoadX509KeyPair(viper.GetString("cert"), viper.GetString("key"))
 		b.Unwrap(err)
 		requestData.TlsClientPair = &pair
 	}
-	if requestData.TlsClientPair == nil && viper.Get("tls-algo") != "" {
+	if requestData.TlsClientPair == nil && viper.GetString("tls-algo") != "" {
 		var err error
 		ca, err := hlutils.GenSelfSignedCa(context.Background(), viper.GetString("tls-algo"), build.Name)
 		b.Unwrap(err)
@@ -81,19 +81,19 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 
 	/* Load other request files */
 
-	if viper.Get("auth-basic") != "" {
+	if viper.GetString("auth-basic") != "" {
 		// User is expected to provide bob:password
 		requestData.AuthBasic = strings.TrimSpace(viper.GetString("auth-basic"))
 	}
 
-	if viper.Get("auth-bearer") != "" {
+	if viper.GetString("auth-bearer") != "" {
 		bytes, err := os.ReadFile(viper.GetString("auth-bearer"))
 		b.Unwrap(err)
 		requestData.AuthBearerToken = strings.TrimSpace(string(bytes))
 	}
 
 	/* Request body */
-	if viper.Get("req-body") != "" {
+	if viper.GetString("req-body") != "" {
 		requestData.BodyReader = strings.NewReader(viper.GetString("req-body"))
 	}
 
