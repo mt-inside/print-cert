@@ -27,6 +27,9 @@ import (
 
 /* TODO
 * - show dane and other stati of name
+*
+* - use multierror lib to gather all errors (at the end of main, if >0 don't actually execute).
+*   - have a bios function to print all of them as err/warn/etc
  */
 
 func init() {
