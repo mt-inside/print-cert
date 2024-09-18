@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/viper"
 
 	hlutils "github.com/mt-inside/http-log/pkg/utils"
+
 	"github.com/mt-inside/print-cert/internal/build"
 	"github.com/mt-inside/print-cert/pkg/utils"
 

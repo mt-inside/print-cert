@@ -29,7 +29,7 @@ func newTracer(
 			pD.TransportRemoteAddr = remote
 		},
 
-		NegotiatedVersion: func(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
+		NegotiatedVersion: func(chosen logging.Version, clientVersions, serverVersions []logging.Version) {
 			pD.TransportVersion = chosen
 		},
 		ClosedConnection: func(err error) {
@@ -46,7 +46,7 @@ func newTracer(
 		},
 		SentShortHeaderPacket: func(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
 		},
-		ReceivedVersionNegotiationPacket: func(dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
+		ReceivedVersionNegotiationPacket: func(dest, src logging.ArbitraryLenConnectionID, _ []logging.Version) {
 		},
 		ReceivedRetry: func(*logging.Header) {
 		},

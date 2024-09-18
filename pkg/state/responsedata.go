@@ -73,7 +73,7 @@ type ResponseData struct {
 	TransportConnTime   time.Time
 	TransportRemoteAddr net.Addr
 	TransportLocalAddr  net.Addr
-	TransportVersion    logging.VersionNumber // Protocol version, iff QUIC
+	TransportVersion    logging.Version // Protocol version, iff QUIC
 
 	TlsClientCertRequest     bool
 	TlsClientCertRequestTime time.Time
