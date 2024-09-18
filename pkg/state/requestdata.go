@@ -58,7 +58,8 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 
 	/* Load TLS material */
 
-	if viper.GetString("cert") != "" || viper.GetString("key") != "" {
+	// TODO: warn if one is set but not the other (in main)
+	if viper.GetString("cert") != "" && viper.GetString("key") != "" {
 		pair, err := tls.LoadX509KeyPair(viper.GetString("cert"), viper.GetString("key"))
 		b.Unwrap(err)
 		requestData.TlsClientPair = &pair
