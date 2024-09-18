@@ -78,7 +78,7 @@ func main() {
 
 	/* TLS and auth */
 	cmd.Flags().BoolP("no-tls", "p", false, "Make a plaintext 'HTTP' connection rather than a TLS 'HTTPS' connection")
-	cmd.Flags().StringP("ca", "C", "", "Path to TLS server CA certificate")
+	cmd.Flags().StringSliceP("ca", "C", []string{}, "Path(s) to TLS server CA certificate(s)")
 	cmd.Flags().StringP("cert", "c", "", "Path to TLS client certificate")
 	cmd.Flags().StringP("key", "k", "", "Path to TLS client key")
 	cmd.Flags().StringP("tls-algo", "K", "", "Algorithm to use for generating self-signed client cert")

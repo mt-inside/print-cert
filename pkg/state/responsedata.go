@@ -210,7 +210,7 @@ func (pD *ResponseData) Print(
 		// This we set InsecureSkipVerify to stop the early bail out, and basically recreate the default checks ourselves
 		// If caCert is nil ServingCertChainVerified() will use system roots to verify
 		// The name given is verified against the cert.
-		op.Block(s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCA, rtData.TlsValidateName, pO.TlsFull))
+		op.Block(s.VerifiedServingCertChain(pD.TlsServerCerts, requestData.TlsServingCAs, rtData.TlsValidateName, pO.TlsFull))
 
 		op.Dedent()
 

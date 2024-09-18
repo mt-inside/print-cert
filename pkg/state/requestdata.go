@@ -30,7 +30,7 @@ type RequestData struct {
 	DnsSystemResolver string
 
 	TlsClientPair *tls.Certificate
-	TlsServingCA  *x509.Certificate
+	TlsServingCAs []*x509.Certificate
 
 	HttpMethod  string
 	HttpForce11 bool
@@ -71,11 +71,12 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 		b.Unwrap(err)
 	}
 
-	if viper.Get("ca") != "" {
-		bytes, err := os.ReadFile(viper.GetString("ca"))
+	for _, caPath := range viper.GetStringSlice("ca") {
+		bytes, err := os.ReadFile(caPath)
 		b.Unwrap(err)
-		requestData.TlsServingCA, err = codec.ParseCertificate(bytes)
+		ca, err := codec.ParseCertificate(bytes)
 		b.Unwrap(err)
+		requestData.TlsServingCAs = append(requestData.TlsServingCAs, ca)
 	}
 
 	/* Load other request files */

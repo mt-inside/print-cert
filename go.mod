@@ -14,7 +14,7 @@ require (
 	github.com/logrusorgru/aurora/v3 v3.0.0
 	github.com/miekg/dns v1.1.62
 	github.com/mt-inside/go-usvc v0.0.7
-	github.com/mt-inside/http-log v0.7.19
+	github.com/mt-inside/http-log v0.7.20
 	github.com/peterzen/goresolver v1.0.2
 	github.com/quic-go/quic-go v0.47.0
 	github.com/sergi/go-diff v1.3.1
