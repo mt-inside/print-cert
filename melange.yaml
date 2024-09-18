@@ -1,7 +1,8 @@
 package:
   name: print-cert
-  epoch: 0
-  version: v0.2.3-1-g6b6a007-dirty
+  epoch: 1
+  version: v0.2.3-19-g752ca12-dirty
+
   description: Prints network certificates
   url: https://github.com/mt-inside/print-cert
   copyright:
