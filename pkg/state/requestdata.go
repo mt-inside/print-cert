@@ -74,7 +74,7 @@ func RequestDataFromViper(s output.TtyStyler, b bios.Bios, dnsResolverName strin
 
 	for _, caPath := range viper.GetStringSlice("ca") {
 		bytes, err := os.ReadFile(caPath)
-		b.Unwrap(err)
+		b.CheckPrintErr(err)
 		ca, err := codec.ParseCertificate(bytes)
 		b.Unwrap(err)
 		requestData.TlsServingCAs = append(requestData.TlsServingCAs, ca)
