@@ -19,6 +19,7 @@ import (
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/parser"
+	"github.com/mt-inside/http-log/pkg/utils"
 )
 
 type PrintOpts struct {
@@ -268,7 +269,7 @@ func (pD *ResponseData) Print(
 		}
 
 		if pO.Requests {
-			op.Linef("Request: Host %s %s %s", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath))
+			op.Linef("Request: Host %s %s %s %s", s.Addr(rtData.HttpHost), s.Verb(requestData.HttpMethod), s.UrlPath(rtData.HttpPath), s.Map(utils.MapValuesStringToAny(requestData.ExtraHeaders), output.NounStyle))
 			op.Indent()
 			if requestData.AuthBearerToken != "" {
 				if token, err := parser.JWTNoSignature(requestData.AuthBearerToken); err == nil {
