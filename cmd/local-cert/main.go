@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
@@ -34,7 +35,17 @@ func main() {
 	}
 	b.Unwrap(err)
 
-	certs, err := codec.ParseCertificates(bytes)
-	b.Unwrap(err)
-	fmt.Println(s.ServingCertChain(certs))
+	block, _ := pem.Decode(bytes)
+	fmt.Println(block.Type)
+
+	switch block.Type {
+	case "CERTIFICATE REQUEST":
+		csr, err := codec.ParseCertificateRequest(bytes)
+		b.Unwrap(err)
+		fmt.Println(s.CertificateRequest(csr))
+	case "CERTIFICATE":
+		certs, err := codec.ParseCertificates(bytes)
+		b.Unwrap(err)
+		fmt.Println(s.ServingCertChain(certs))
+	}
 }
