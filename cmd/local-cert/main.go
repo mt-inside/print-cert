@@ -42,10 +42,10 @@ func main() {
 	case "CERTIFICATE REQUEST":
 		csr, err := codec.ParseCertificateRequest(bytes)
 		b.Unwrap(err)
-		fmt.Println(s.CertificateRequest(csr))
+		fmt.Print(s.CertificateRequest(csr))
 	case "CERTIFICATE":
 		certs, err := codec.ParseCertificates(bytes)
 		b.Unwrap(err)
-		fmt.Println(s.ServingCertChain(certs))
+		fmt.Print(s.ServingCertChain(certs))
 	}
 }
